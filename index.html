@@ -1,57 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BuildLedger</title>
 
 <style>
-body{margin:0;font-family:Arial;background:#f5f6f8}
-.sidebar{width:220px;background:#111;color:#fff;height:100vh;position:fixed;padding:10px}
-.sidebar.collapsed{width:60px}
-.main{margin-left:220px;padding:20px}
-.sidebar.collapsed + .main{margin-left:60px}
-.card{background:#fff;padding:15px;border-radius:10px;margin-bottom:15px}
-input,select{width:100%;padding:8px;margin:5px 0}
-button{padding:8px 12px;margin:5px;cursor:pointer}
-.bar{height:10px;background:#eee;border-radius:6px}
+body{margin:0;font-family:Inter,Arial;background:#f3f0ea;color:#2b2b2b}
+.sidebar{
+  width:240px;
+  background:#1a1a1a;
+  color:#fff;
+  height:100vh;
+  position:fixed;
+  padding:20px;
+}
+.sidebar h2{margin-top:0}
+.sidebar div{margin:15px 0;cursor:pointer}
+
+.main{
+  margin-left:240px;
+  padding:25px;
+}
+
+.cards{
+  display:flex;
+  gap:20px;
+  margin-bottom:20px;
+}
+.card{
+  flex:1;
+  background:#fff;
+  border-radius:12px;
+  padding:20px;
+  text-align:center;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+
+.section{
+  background:#fff;
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:20px;
+}
+
+input,select{
+  width:100%;
+  padding:10px;
+  margin:6px 0;
+}
+
+button{
+  padding:10px 15px;
+  background:#c17f3a;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.bar{height:8px;background:#ddd;border-radius:5px;margin-top:6px}
 .fill{height:100%;background:#c17f3a}
+
+.table{width:100%;margin-top:10px}
+.table div{padding:8px;border-bottom:1px solid #eee}
 </style>
 </head>
 
 <body>
 
 <div class="sidebar">
-<button onclick="toggleSidebar()">☰</button>
-<button onclick="copyShareLink()">Share</button>
-<button onclick="downloadBackup()">Backup</button>
-<input type="file" onchange="uploadBackup(event)">
+  <h2>BuildLedger</h2>
+  <div>Dashboard</div>
+  <div>Sources</div>
+  <div>Expenses</div>
 </div>
 
 <div class="main">
-<h2>BuildLedger</h2>
 
-<div class="card">
-<input id="src-name" placeholder="Source name">
-<input id="src-total" placeholder="Total">
-<input id="src-recv" placeholder="Received">
-<button onclick="addSource()">Add Source</button>
+<h1>Dashboard</h1>
+
+<div class="cards">
+  <div class="card">
+    <div>Total Received</div>
+    <h2 id="totRecv">₹0</h2>
+  </div>
+  <div class="card">
+    <div>Total Spent</div>
+    <h2 id="totSpent">₹0</h2>
+  </div>
+  <div class="card">
+    <div>Available Balance</div>
+    <h2 id="bal">₹0</h2>
+  </div>
 </div>
 
-<div class="card">
-<select id="srcSel"></select>
-<input id="amt" placeholder="Expense">
-<button onclick="addExpense()">Add Expense</button>
+<div class="section">
+  <h3>Add Source</h3>
+  <input id="name" placeholder="Source name">
+  <input id="total" placeholder="Total">
+  <input id="recv" placeholder="Received">
+  <button onclick="addSource()">Add Source</button>
 </div>
 
-<div class="card">
-<h3>Sources</h3>
-<div id="sources"></div>
+<div class="section">
+  <h3>Add Expense</h3>
+  <select id="srcSel"></select>
+  <input id="amt" placeholder="Amount">
+  <button onclick="addExpense()">Add Expense</button>
 </div>
 
-<div class="card">
-<h3>Expenses</h3>
-<div id="expenses"></div>
+<div class="section">
+  <h3>Sources</h3>
+  <div id="sources"></div>
+</div>
+
+<div class="section">
+  <h3>Expenses</h3>
+  <div id="expenses"></div>
 </div>
 
 </div>
@@ -85,48 +151,40 @@ function load(){
 }
 
 function loadCloud(){
-  if(!db) return;
+  if(!db)return;
   db.collection('ledger').doc('shared').onSnapshot(doc=>{
     if(doc.exists){
       S=doc.data();
-      normalizeData();
+      normalize();
       render();
     }
   });
 }
 
-function normalizeData(){
+function normalize(){
+  if(!S.sources) S.sources=[];
+  if(!S.expenses) S.expenses=[];
+
   S.sources.forEach(s=>{
     if(s.recv===undefined) s.recv=0;
-    if(!s.history) s.history=[];
   });
 }
 
 function uid(){return Date.now()}
 
+/* SOURCE */
 function addSource(){
-  const name=document.getElementById('src-name').value;
-  const total=parseFloat(document.getElementById('src-total').value)||0;
-  const recv=parseFloat(document.getElementById('src-recv').value)||0;
+  const name=document.getElementById('name').value;
+  const total=parseFloat(document.getElementById('total').value)||0;
+  const recv=parseFloat(document.getElementById('recv').value)||0;
 
   if(!name||total<=0) return;
 
-  S.sources.push({
-    id:uid(),
-    name,
-    total,
-    recv,
-    history: recv>0 ? [{
-      date:new Date().toISOString().split('T')[0],
-      amount:recv,
-      notes:'Initial'
-    }] : []
-  });
-
-  save();
-  render();
+  S.sources.push({id:uid(),name,total,recv});
+  save();render();
 }
 
+/* EXPENSE */
 function addExpense(){
   const id=document.getElementById('srcSel').value;
   const amt=parseFloat(document.getElementById('amt').value)||0;
@@ -134,7 +192,7 @@ function addExpense(){
 
   if(!src||amt<=0) return;
 
-  const spent = S.expenses
+  const spent=S.expenses
     .filter(e=>e.src==id)
     .reduce((a,b)=>a+b.amt,0);
 
@@ -143,36 +201,27 @@ function addExpense(){
     return;
   }
 
-  S.expenses.push({
-    id:uid(),
-    src:id,
-    amt
-  });
-
-  save();
-  render();
-}
-
-function deleteExpense(id){
-  S.expenses = S.expenses.filter(e=>e.id!=id);
-  save();
-  render();
+  S.expenses.push({id:uid(),src:id,amt});
+  save();render();
 }
 
 function render(){
 
-  // dropdown
-  document.getElementById('srcSel').innerHTML =
+  document.getElementById('srcSel').innerHTML=
     S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 
-  // sources
-  document.getElementById('sources').innerHTML =
+  let totRecv=0, totSpent=0;
+
+  document.getElementById('sources').innerHTML=
     S.sources.map(s=>{
-      const spent = S.expenses
+      const spent=S.expenses
         .filter(e=>e.src==s.id)
         .reduce((a,b)=>a+b.amt,0);
 
-      const pct = s.total ? (spent/s.total)*100 : 0;
+      totRecv+=s.recv;
+      totSpent+=spent;
+
+      const pct=s.total?(spent/s.total)*100:0;
 
       return `<div>
         ${s.name} ₹${spent}/${s.total}
@@ -180,45 +229,17 @@ function render(){
       </div>`;
     }).join('');
 
-  // expenses
-  document.getElementById('expenses').innerHTML =
-    S.expenses.map(e=>`
-      <div>
-        ₹${e.amt}
-        <button onclick="deleteExpense(${e.id})">❌</button>
-      </div>
-    `).join('');
-}
+  document.getElementById('expenses').innerHTML=
+    S.expenses.map(e=>`<div>₹${e.amt}</div>`).join('');
 
-function toggleSidebar(){
-  document.querySelector('.sidebar').classList.toggle('collapsed');
-}
-
-function copyShareLink(){
-  navigator.clipboard.writeText(window.location.href);
-  alert('Copied');
-}
-
-function downloadBackup(){
-  const a=document.createElement('a');
-  a.href='data:application/json,'+encodeURIComponent(JSON.stringify(S));
-  a.download='backup.json';
-  a.click();
-}
-
-function uploadBackup(e){
-  const r=new FileReader();
-  r.onload=()=>{
-    S=JSON.parse(r.result);
-    save();
-    render();
-  };
-  r.readAsText(e.target.files[0]);
+  document.getElementById('totRecv').innerText="₹"+totRecv;
+  document.getElementById('totSpent').innerText="₹"+totSpent;
+  document.getElementById('bal').innerText="₹"+(totRecv-totSpent);
 }
 
 function start(){
   load();
-  normalizeData();
+  normalize();
   render();
   setTimeout(()=>{
     initFirebase();
