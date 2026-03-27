@@ -202,7 +202,8 @@ tbody td:first-child{color:var(--ink);font-weight:500}
       <div class="ddot" id="ddot"></div>
       <span class="dl" id="dlabel">Drive: not connected</span>
     </div>
-    <div class="sbver">v2.0 · runs offline</div>
+    <button class="btn bs sm" id="sync-btn" onclick="manualSync()" style="width:100%;margin-bottom:8px;justify-content:center;display:none">⟳ Pull from Drive</button>
+    <div class="sbver">v2.1 · <span id="last-sync-sb">never synced</span></div>
   </div>
 </aside>
 
@@ -272,9 +273,10 @@ tbody td:first-child{color:var(--ink);font-weight:500}
   <div class="card">
     <div class="ch">
       <div class="ct">Expense Log</div>
-      <div class="flex gap2" style="align-items:center">
+      <div class="flex gap2" style="align-items:center;flex-wrap:wrap">
         <span id="exp-count" class="tm mono" style="font-size:13px">0 entries</span>
-        <button class="btn bs sm" onclick="exportCSV()">⬇ Export CSV</button>
+        <button class="btn bgr sm" onclick="exportXLSX()">⬇ Excel (.xls)</button>
+        <button class="btn bs sm" onclick="exportCSV()">⬇ CSV</button>
       </div>
     </div>
     <div class="tw"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Source</th><th>Notes</th><th class="tr">Amount</th><th></th></tr></thead><tbody id="exp-body"></tbody></table></div>
@@ -364,12 +366,25 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 <!-- MODALS -->
 <div class="mo" id="mo-updsrc">
   <div class="modal">
-    <h3>Update Source</h3><p class="msub">Record additional funds received</p>
+    <h3>Update Received Amount</h3>
+    <p class="msub">Record additional money received from this source</p>
     <input type="hidden" id="us-id"/>
-    <div class="fd mt2"><label>Additional Amount Received (₹)</label><input type="number" id="us-amt" placeholder="e.g. 200000"/></div>
+    <!-- Source context summary -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:20px;font-size:13px;">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px;color:var(--ink)" id="us-src-name">—</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;color:var(--muted)">
+        <span>Total sanctioned: <strong style="color:var(--ink2)" id="us-src-total">—</strong></span>
+        <span>Received so far: <strong style="color:var(--success)" id="us-src-recv">—</strong></span>
+        <span>Yet to receive: <strong style="color:var(--accent)" id="us-src-avail">—</strong></span>
+      </div>
+    </div>
+    <div id="us-hint" style="display:none;background:var(--accent-light);border:1px solid #d4b080;border-radius:8px;padding:10px 14px;font-size:12px;color:#7a4a10;margin-bottom:16px;">
+      ℹ️ You've already received 100% of the sanctioned amount. If you received more, this will automatically update the total sanctioned figure.
+    </div>
+    <div class="fd"><label>New Amount Received (₹)</label><input type="number" id="us-amt" placeholder="e.g. 1000000 (enter the new amount received)"/></div>
     <div class="fd mt2"><label>Date Received</label><input type="date" id="us-date"/></div>
-    <div class="fd mt2"><label>Notes</label><input id="us-notes" placeholder="e.g. Second tranche, loan disbursement…"/></div>
-    <div class="ma"><button class="btn bs" onclick="cm('mo-updsrc')">Cancel</button><button class="btn bp" onclick="doUpdSrc()">Update</button></div>
+    <div class="fd mt2"><label>Notes</label><input id="us-notes" placeholder="e.g. Second tranche, Jan disbursement…"/></div>
+    <div class="ma"><button class="btn bs" onclick="cm('mo-updsrc')">Cancel</button><button class="btn bp" onclick="doUpdSrc()">✓ Update</button></div>
   </div>
 </div>
 
@@ -391,17 +406,27 @@ tbody td:first-child{color:var(--ink);font-weight:500}
       </div>
       <div class="ds">
         <div class="dsn">Step 2 — Create Credentials</div>
-        <p>Go to <strong>Credentials</strong> → Create <strong>API Key</strong> → Also create an <strong>OAuth 2.0 Client ID</strong> (Web application type). Add the URL where you open this HTML file as an Authorised JavaScript Origin (e.g. <code>http://localhost</code> or <code>file://</code> may not work — host on a simple local server or GitHub Pages).</p>
+        <p>Go to <strong>Credentials</strong> → Create <strong>API Key</strong> → Also create an <strong>OAuth 2.0 Client ID</strong> (Web application). Add <code>https://jnaashish.github.io</code> as an Authorised JavaScript Origin.</p>
       </div>
       <div class="ds">
-        <div class="dsn">Step 3 — Enter your credentials</div>
+        <div class="dsn">Step 3 — Enter credentials</div>
         <input id="drv-cid" placeholder="OAuth Client ID (…apps.googleusercontent.com)"/>
         <input id="drv-key" placeholder="API Key (AIza…)" style="margin-top:8px"/>
       </div>
-      <div class="ma"><button class="btn bs" onclick="cm('mo-drive')">Cancel</button><button class="btn bp" onclick="connectDrive()">🔗 Connect to Drive</button></div>
+      <div class="ds" style="border:1.5px solid #aac0e8;background:var(--accent2-light)">
+        <div class="dsn" style="color:var(--accent2)">Optional — Load Shared Data</div>
+        <p style="color:var(--accent2)">If someone shared their Drive file ID with you, paste it here to load their data directly (read-only pull).</p>
+        <input id="drv-shared-id" placeholder="Shared Google Drive File ID (optional)" style="border-color:#aac0e8"/>
+      </div>
+      <div class="ma"><button class="btn bs" onclick="cm('mo-drive')">Cancel</button><button class="btn bbl" onclick="loadSharedFile()" id="btn-load-shared" style="display:none">⬇ Load Shared File</button><button class="btn bp" onclick="connectDrive()">🔗 Connect to Drive</button></div>
     </div>
     <div id="drv-con" style="display:none">
       <div class="info-box">✅ Connected! Data auto-saves to <strong>BuildLedger_data.json</strong> in your Google Drive.</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+        <div style="font-weight:600;margin-bottom:6px;color:var(--ink2)">📋 Your File ID (share this with others)</div>
+        <div id="drv-file-id-display" class="mono" style="font-size:11px;color:var(--muted);word-break:break-all;background:var(--bg2);padding:8px;border-radius:6px;margin-bottom:8px">—</div>
+        <button class="btn bs sm" onclick="copyFileId()">Copy File ID</button>
+      </div>
       <div class="flex gap2" style="flex-wrap:wrap;margin-top:8px">
         <button class="btn bgr" onclick="saveDrive()">⬆ Save Now</button>
         <button class="btn bbl" onclick="loadDrive()">⬇ Load from Drive</button>
@@ -496,10 +521,18 @@ function addSource(){
   save();renderSrc();refreshDrops();toast('Source added!');
 }
 function openUpdSrc(id){
+  const src=S.sources.find(s=>s.id===id);
+  if(!src)return;
   document.getElementById('us-id').value=id;
   document.getElementById('us-amt').value='';
   document.getElementById('us-notes').value='';
   document.getElementById('us-date').value=new Date().toISOString().split('T')[0];
+  // Show source context in modal
+  document.getElementById('us-src-name').textContent=src.name;
+  document.getElementById('us-src-total').textContent=fmt(src.total);
+  document.getElementById('us-src-recv').textContent=fmt(src.recv);
+  document.getElementById('us-src-avail').textContent=fmt(src.total-src.recv);
+  document.getElementById('us-hint').style.display=src.recv>=src.total?'':'none';
   om('mo-updsrc');
 }
 function doUpdSrc(){
@@ -510,12 +543,16 @@ function doUpdSrc(){
   if(extra<=0){toast('Enter valid amount','e');return}
   const src=S.sources.find(s=>s.id===id);
   if(!src)return;
-  if(src.recv+extra>src.total){toast(`Exceeds total of ${fmt(src.total)}`,'e');return}
+  // KEY FIX: If received would exceed total sanctioned, auto-expand the total
+  // This handles the case where someone initially underestimated or received more than sanctioned
+  if(src.recv+extra>src.total){
+    src.total=src.recv+extra; // Auto-expand total to accommodate
+  }
   src.recv+=extra;
   src.history=src.history||[];
   src.history.push({date,amount:extra,notes});
   save();cm('mo-updsrc');renderSrc();renderDash();
-  toast(`Updated ${src.name} +${fmt(extra)}`);
+  toast(`✓ ${src.name} updated +${fmt(extra)}`);
 }
 function delSrc(id){
   if(S.expenses.some(e=>e.source===id)){toast('Used in expenses — cannot delete','e');return}
@@ -602,7 +639,57 @@ function exportCSV(){
   const rows=[['date','description','amount','category','source','notes']];
   S.expenses.forEach(e=>{const cat=S.categories.find(c=>c.id===e.category);const src=S.sources.find(s=>s.id===e.source);rows.push([fd(e.date),e.desc,e.amount,cat?.name||'',src?.name||'',e.notes||'']);});
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='buildledger_'+new Date().toISOString().split('T')[0]+'.csv';a.click();toast('CSV exported!');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='buildledger_'+new Date().toISOString().split('T')[0]+'.csv';a.click();toast('CSV exported — open in Excel!');
+}
+
+function exportXLSX(){
+  // Build a full Excel-compatible workbook as XML (SpreadsheetML) — opens natively in Excel
+  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const cell=(v,t='String')=>t==='Number'?`<Cell><Data ss:Type="Number">${v}</Data></Cell>`:`<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
+  const hdr=v=>`<Cell ss:StyleID="hdr"><Data ss:Type="String">${esc(v)}</Data></Cell>`;
+  const row=cells=>`<Row>${cells.join('')}</Row>`;
+
+  // Sheet 1: Expenses
+  const expRows=[row([hdr('Date'),hdr('Category'),hdr('Description'),hdr('Source'),hdr('Amount (₹)'),hdr('Notes')])];
+  S.expenses.forEach(e=>{
+    const cat=S.categories.find(c=>c.id===e.category);
+    const src=S.sources.find(s=>s.id===e.source);
+    expRows.push(row([cell(fd(e.date)),cell(cat?.name||''),cell(e.desc),cell(src?.name||''),cell(e.amount,'Number'),cell(e.notes||'')]));
+  });
+  const totalAmt=S.expenses.reduce((s,e)=>s+e.amount,0);
+  expRows.push(row([cell(''),cell(''),cell(''),cell('TOTAL',),cell(totalAmt,'Number'),cell('')]));
+
+  // Sheet 2: Sources
+  const srcRows=[row([hdr('Source Name'),hdr('Type'),hdr('Total Sanctioned (₹)'),hdr('Total Received (₹)'),hdr('Total Spent (₹)'),hdr('Available (₹)'),hdr('Yet to Draw (₹)'),hdr('Date'),hdr('Notes')])];
+  S.sources.forEach(src=>{
+    const sp=srcSpent(src.id);
+    srcRows.push(row([cell(src.name),cell(src.type),cell(src.total,'Number'),cell(src.recv,'Number'),cell(sp,'Number'),cell(src.recv-sp,'Number'),cell(src.total-src.recv,'Number'),cell(fd(src.date)),cell(src.notes||'')]));
+  });
+
+  // Sheet 3: Category Summary
+  const catTotals={};S.categories.forEach(c=>catTotals[c.id]=0);S.expenses.forEach(e=>{if(catTotals[e.category]!==undefined)catTotals[e.category]+=e.amount;});
+  const catRows=[row([hdr('Category'),hdr('Total Spent (₹)'),hdr('% of Total')])];
+  const grandTotal=S.expenses.reduce((s,e)=>s+e.amount,0)||1;
+  S.categories.filter(c=>catTotals[c.id]>0).sort((a,b)=>catTotals[b.id]-catTotals[a.id]).forEach(c=>{
+    catRows.push(row([cell(c.name),cell(catTotals[c.id],'Number'),cell(Math.round(catTotals[c.id]/grandTotal*100)+'%')]));
+  });
+
+  const xl=`<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:x="urn:schemas-microsoft-com:office:excel">
+<Styles>
+  <Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#F0E0C8" ss:Pattern="Solid"/></Style>
+</Styles>
+<Worksheet ss:Name="Expenses"><Table>${expRows.join('')}</Table></Worksheet>
+<Worksheet ss:Name="Sources"><Table>${srcRows.join('')}</Table></Worksheet>
+<Worksheet ss:Name="Category Summary"><Table>${catRows.join('')}</Table></Worksheet>
+</Workbook>`;
+  const a=document.createElement('a');
+  a.href='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(xl);
+  a.download='BuildLedger_'+new Date().toISOString().split('T')[0]+'.xls';
+  a.click();toast('✓ Excel file downloaded!');
 }
 
 // ━━━ BULK IMPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -819,6 +906,8 @@ async function saveDrive(){
       const j=await r.json();drv.fileId=j.id;localStorage.setItem('bld',JSON.stringify(drv));
     }
     document.getElementById('last-sync').textContent=new Date().toLocaleTimeString('en-IN');
+    document.getElementById('last-sync-sb').textContent=new Date().toLocaleTimeString('en-IN');
+    if(drv.fileId){const el=document.getElementById('drv-file-id-display');if(el)el.textContent=drv.fileId;}
     setDot('on');toast('✓ Saved to Google Drive');
   }catch(e){setDot('on');toast('Drive save failed: '+e.message,'e');console.error(e);}
 }
@@ -841,12 +930,48 @@ function disDrive(){
   updDrvUI(false);cm('mo-drive');toast('Disconnected from Drive');
 }
 
+function copyFileId(){
+  if(drv.fileId){navigator.clipboard.writeText(drv.fileId).then(()=>toast('File ID copied! Share this with others.'));}
+  else toast('No file ID yet — save first','e');
+}
+
+function loadSharedFile(){
+  const sid=document.getElementById('drv-shared-id').value.trim();
+  if(!sid){toast('Enter a shared File ID first','e');return}
+  if(!drvToken){toast('Connect to Drive first','e');return}
+  drv.fileId=sid;
+  loadDrive();
+}
+
+function manualSync(){
+  if(drvToken&&drv.fileId)loadDrive();
+  else if(drv.connected)loadGapi();
+  else{toast('Connect to Drive first — click the Drive pill','i');openDriveModal();}
+}
+
 function updDrvUI(on){
   setDot(on?'on':'off');
   document.getElementById('dlabel').textContent=on?'Drive: connected':'Drive: not connected';
   document.getElementById('drv-dis').style.display=on?'none':'';
   document.getElementById('drv-con').style.display=on?'':'none';
+  document.getElementById('sync-btn').style.display=on?'':'none';
+  if(on&&drv.fileId){
+    const el=document.getElementById('drv-file-id-display');
+    if(el)el.textContent=drv.fileId;
+  }
+  // Show load-shared btn only when credentials are entered
+  const shareBtn=document.getElementById('btn-load-shared');
+  if(shareBtn)shareBtn.style.display=drv.clientId?'':'none';
 }
+
+// Watch shared ID field to show/hide load button
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp=document.getElementById('drv-shared-id');
+  if(inp)inp.addEventListener('input',()=>{
+    const btn=document.getElementById('btn-load-shared');
+    if(btn)btn.style.display=inp.value.trim()?'':'none';
+  });
+});
 
 function setDot(s){
   const d=document.getElementById('ddot');d.className='ddot'+(s==='on'?' on':s==='sync'?' sync':'');
