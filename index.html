@@ -1,999 +1,117 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BuildLedger — Construction Finance Tracker</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<style>
-:root {
-  --bg:#f5f0e8; --bg2:#ede7d9; --surface:#fff; --surface2:#faf7f2;
-  --border:#ddd5c4; --ink:#1a1610; --ink2:#4a4035; --muted:#8a7d6a;
-  --accent:#c17f3a; --accent-light:#f0e0c8;
-  --accent2:#3a6bc1; --accent2-light:#d0dff5;
-  --success:#3a9c6b; --success-light:#d0f0e2;
-  --danger:#c13a3a; --danger-light:#f5d0d0;
-  --shadow:0 2px 12px rgba(26,22,16,.08); --shadow-lg:0 8px 32px rgba(26,22,16,.14);
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
-body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
+<!-- Updated key sections only (concise patch). Apply into your existing file -->
 
-/* LAYOUT */
-.shell{display:flex;min-height:100vh}
-.sidebar{width:240px;flex-shrink:0;background:var(--ink);color:#e8e0d4;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-.sb-brand{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
-.sb-brand h1{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:#fff;letter-spacing:-.5px;line-height:1.1}
-.sb-brand p{font-size:11px;color:rgba(255,255,255,.35);font-family:'IBM Plex Mono',monospace;margin-top:4px;letter-spacing:1px;text-transform:uppercase}
-.sb-nav{padding:20px 12px;flex:1;display:flex;flex-direction:column;gap:4px}
-.nl{font-size:10px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.3);letter-spacing:2px;text-transform:uppercase;padding:12px 12px 6px}
-.nb{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:none;background:transparent;color:rgba(255,255,255,.55);font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;text-align:left;width:100%}
-.nb .ic{font-size:16px;width:20px;text-align:center}
-.nb:hover{background:rgba(255,255,255,.08);color:#fff}
-.nb.active{background:var(--accent);color:#fff}
-.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08)}
-.drive-pill{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.06);margin-bottom:8px;cursor:pointer;transition:background .2s}
-.drive-pill:hover{background:rgba(255,255,255,.12)}
-.ddot{width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0;transition:all .3s}
-.ddot.on{background:var(--success);box-shadow:0 0 6px rgba(58,156,107,.7)}
-.ddot.sync{background:var(--accent);animation:pulse 1s infinite}
-.dl{font-size:11px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.5)}
-.sbver{font-size:10px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.2)}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-
-/* MAIN */
-.main{flex:1;overflow-y:auto;padding:40px 40px 80px;max-width:1100px}
-.sec{display:none}
-.sec.active{display:block;animation:fadeUp .3s ease}
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.sh{margin-bottom:32px}
-.sh h2{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;letter-spacing:-.5px}
-.sh p{color:var(--muted);font-size:14px;margin-top:4px}
-
-/* CARD */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow);margin-bottom:24px}
-.ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
-.ct{font-size:13px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
-
-/* STAT */
-.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
-.sc{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.sc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
-.sc.t1::before{background:var(--accent2)}.sc.t2::before{background:var(--danger)}.sc.t3::before{background:var(--success)}.sc.t4::before{background:var(--accent)}
-.sl{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.sv{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;letter-spacing:-.5px}
-.ss{font-size:12px;color:var(--muted);margin-top:4px}
-
-/* FORM */
-.fg{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.fg3{grid-template-columns:1fr 1fr 1fr}
-.fd{display:flex;flex-direction:column;gap:6px}
-.fd label{font-size:12px;font-weight:600;color:var(--ink2);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.5px}
-.fd input,.fd select,.fd textarea{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--ink);font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
-.fd input:focus,.fd select:focus,.fd textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(193,127,58,.12)}
-.fd select option{background:#fff}
-.fd textarea{resize:vertical;min-height:72px}
-
-/* BTN */
-.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;border:none;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap}
-.bp{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(193,127,58,.3)}.bp:hover{background:#a8692a;transform:translateY(-1px)}
-.bs{background:var(--surface2);border:1.5px solid var(--border);color:var(--ink2)}.bs:hover{border-color:var(--accent);color:var(--accent)}
-.bd{background:var(--danger-light);color:var(--danger);border:1px solid #e8b0b0}.bd:hover{background:var(--danger);color:#fff}
-.bbl{background:var(--accent2-light);color:var(--accent2);border:1px solid #aac0e8}.bbl:hover{background:var(--accent2);color:#fff}
-.bgr{background:var(--success-light);color:var(--success);border:1px solid #a0d8bc}.bgr:hover{background:var(--success);color:#fff}
-.sm{padding:6px 12px;font-size:12px;border-radius:7px}
-
-/* TABLE */
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse}
-thead th{text-align:left;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:10px 14px;border-bottom:2px solid var(--border);white-space:nowrap}
-tbody tr{border-bottom:1px solid var(--bg2);transition:background .15s}
-tbody tr:hover{background:var(--surface2)}
-tbody td{padding:12px 14px;font-size:14px;color:var(--ink2);vertical-align:middle}
-tbody td:first-child{color:var(--ink);font-weight:500}
-
-/* BADGE */
-.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace}
-.bo{background:var(--accent-light);color:var(--accent)}
-.bb{background:var(--accent2-light);color:var(--accent2)}
-.bg{background:var(--success-light);color:var(--success)}
-.br{background:var(--danger-light);color:var(--danger)}
-
-/* PROGRESS */
-.pw{background:var(--bg2);border-radius:8px;height:10px;overflow:hidden;margin-top:10px}
-.pb{height:100%;border-radius:8px;transition:width .6s cubic-bezier(.4,0,.2,1)}
-.pb.used{background:linear-gradient(90deg,var(--accent),#e09050)}
-.pb.spent{background:linear-gradient(90deg,var(--danger),#e05050)}
-
-/* SOURCE CARDS */
-.src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:24px}
-.src-card{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow);transition:box-shadow .2s}
-.src-card:hover{box-shadow:var(--shadow-lg)}
-.src-type{font-size:11px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.src-name{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;margin-bottom:12px}
-.src-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px}
-.src-row strong{color:var(--ink2);font-weight:600}
-.src-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-
-/* CHIPS */
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
-.chip{padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:all .2s;color:var(--ink2)}
-.chip.active,.chip:hover{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
-
-/* CHARTS */
-.bc{display:flex;flex-direction:column;gap:14px}
-.br-row{display:flex;align-items:center;gap:12px}
-.bl{width:140px;font-size:13px;color:var(--ink2);font-weight:500;flex-shrink:0;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
-.bt{flex:1;background:var(--bg2);border-radius:6px;height:28px;overflow:hidden}
-.bf{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent),#e09050);display:flex;align-items:center;padding-left:10px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:#fff;font-weight:600;min-width:40px;transition:width .8s cubic-bezier(.4,0,.2,1)}
-.bamt{width:100px;text-align:right;font-size:13px;font-family:'IBM Plex Mono',monospace;color:var(--ink2);font-weight:600;flex-shrink:0}
-.dc{display:flex;align-items:center;gap:32px}
-.dleg{display:flex;flex-direction:column;gap:10px}
-.li{display:flex;align-items:center;gap:10px;font-size:13px}
-.ldot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
-.lname{color:var(--ink2);font-weight:500;flex:1}
-.lpct{font-family:'IBM Plex Mono',monospace;color:var(--muted);font-size:12px}
-.lamt{font-family:'IBM Plex Mono',monospace;color:var(--ink);font-weight:600;font-size:12px}
-
-/* UPLOAD ZONE */
-.uz{border:2px dashed var(--border);border-radius:14px;padding:36px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;background:var(--surface2)}
-.uz:hover,.uz.dov{border-color:var(--accent);background:var(--accent-light)}
-.uz input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.uz-icon{font-size:36px;margin-bottom:12px}
-.uz p{color:var(--muted);font-size:14px}.uz strong{color:var(--accent)}
-.uz small{font-size:12px;color:var(--muted);display:block;margin-top:6px}
-.ptw{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-top:16px}
-.ptw table thead th{position:sticky;top:0;background:var(--surface2);z-index:1}
-.rok{background:rgba(58,156,107,.05)}
-.rerr{background:rgba(193,58,58,.05)}
-
-/* MODAL */
-.mo{display:none;position:fixed;inset:0;background:rgba(26,22,16,.5);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center}
-.mo.open{display:flex}
-.modal{background:var(--surface);border-radius:20px;padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:mIn .25s ease}
-.modal.wide{width:780px}
-@keyframes mIn{from{opacity:0;transform:scale(.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
-.modal h3{font-family:'Playfair Display',serif;font-size:22px;margin-bottom:4px}
-.msub{font-size:13px;color:var(--muted);margin-bottom:20px}
-.ma{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;flex-wrap:wrap}
-
-/* DRIVE STEPS */
-.ds{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:12px}
-.dsn{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.ds p{font-size:14px;color:var(--ink2);line-height:1.6}
-.ds input{margin-top:10px;width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink);outline:none}
-.ds input:focus{border-color:var(--accent)}
-.ds code{background:rgba(0,0,0,.06);padding:2px 6px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:13px;word-break:break-all}
-
-/* MISC */
-.divider{height:1px;background:var(--border);margin:20px 0}
-.empty{text-align:center;padding:48px 20px;color:var(--muted)}
-.empty .ei{font-size:40px;margin-bottom:12px}.empty p{font-size:15px}.empty small{font-size:13px;display:block;margin-top:4px}
-.toast{position:fixed;bottom:28px;right:28px;background:var(--ink);color:#fff;padding:13px 20px;border-radius:12px;font-size:14px;font-weight:500;box-shadow:var(--shadow-lg);transform:translateY(80px);opacity:0;transition:all .35s cubic-bezier(.175,.885,.32,1.275);z-index:9998;max-width:360px}
-.toast.show{transform:translateY(0);opacity:1}.toast.s{border-left:3px solid var(--success)}.toast.e{border-left:3px solid var(--danger)}.toast.i{border-left:3px solid var(--accent2)}
-.info-box{background:var(--accent2-light);border:1px solid #aac0e8;border-radius:10px;padding:14px 18px;font-size:13px;color:var(--accent2);line-height:1.6;margin-bottom:16px}
-.warn-box{background:var(--accent-light);border:1px solid #d4b080;border-radius:10px;padding:14px 18px;font-size:13px;color:#7a4a10;line-height:1.6;margin-bottom:16px}
-.flex{display:flex}.gap2{gap:8px}.gap3{gap:12px}
-.mt1{margin-top:6px}.mt2{margin-top:12px}.mt3{margin-top:20px}
-.tr{text-align:right}.td{color:var(--danger)}.tg{color:var(--success)}.tm{color:var(--muted)}
-.mono{font-family:'IBM Plex Mono',monospace}.fw6{font-weight:600}
-@media(max-width:768px){.sidebar{width:60px}.sb-brand,.nl,.nb span,.dl{display:none}.nb{justify-content:center}.main{padding:24px 16px 60px}.sg{grid-template-columns:1fr 1fr}.fg,.fg3{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-<div class="shell">
-
-<!-- SIDEBAR -->
-<aside class="sidebar">
-  <div class="sb-brand"><h1>Build<br>Ledger</h1><p>Construction Finance</p></div>
-  <nav class="sb-nav">
-    <div class="nl">Overview</div>
-    <button class="nb active" onclick="go('dashboard')"><span class="ic">📊</span><span>Dashboard</span></button>
-    <div class="nl">Manage</div>
-    <button class="nb" onclick="go('sources')"><span class="ic">💰</span><span>Sources</span></button>
-    <button class="nb" onclick="go('expenses')"><span class="ic">🧾</span><span>Expenses</span></button>
-    <button class="nb" onclick="go('import')"><span class="ic">📥</span><span>Bulk Import</span></button>
-    <button class="nb" onclick="go('categories')"><span class="ic">🏷️</span><span>Categories</span></button>
-    <div class="nl">Insights</div>
-    <button class="nb" onclick="go('analytics')"><span class="ic">📈</span><span>Analytics</span></button>
-  </nav>
-  <div class="sb-footer">
-    <div class="drive-pill" onclick="openDriveModal()">
-      <div class="ddot" id="ddot"></div>
-      <span class="dl" id="dlabel">Drive: not connected</span>
-    </div>
-    <button class="btn bs sm" id="sync-btn" onclick="manualSync()" style="width:100%;margin-bottom:8px;justify-content:center;display:none">⟳ Pull from Drive</button>
-    <div class="sbver">v2.1 · <span id="last-sync-sb">never synced</span></div>
-  </div>
-</aside>
-
-<!-- MAIN -->
-<main class="main">
-
-<!-- DASHBOARD -->
-<section id="sec-dashboard" class="sec active">
-  <div class="sh"><h2>Dashboard</h2><p>Your construction finance at a glance</p></div>
-  <div class="sg">
-    <div class="sc t1"><div class="sl">Total Funds Received</div><div class="sv" id="s-total">₹0</div><div class="ss">across all sources</div></div>
-    <div class="sc t2"><div class="sl">Total Spent</div><div class="sv" id="s-spent">₹0</div><div class="ss">all expenses</div></div>
-    <div class="sc t3"><div class="sl">Available Balance</div><div class="sv" id="s-balance">₹0</div><div class="ss">funds – expenses</div></div>
-    <div class="sc t4"><div class="sl">Yet to Receive</div><div class="sv" id="s-uncommitted">₹0</div><div class="ss">sanctioned, not drawn</div></div>
-  </div>
-  <div class="card">
-    <div class="ch"><div class="ct">Recent Expenses</div><button class="btn bp sm" onclick="go('expenses')">Add Expense</button></div>
-    <div class="tw"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Source</th><th class="tr">Amount</th></tr></thead><tbody id="d-exp-body"></tbody></table></div>
-  </div>
-  <div class="card">
-    <div class="ch"><div class="ct">Source Overview</div><button class="btn bs sm" onclick="go('sources')">Manage Sources</button></div>
-    <div id="d-src-list"></div>
-  </div>
-</section>
-
-<!-- SOURCES -->
-<section id="sec-sources" class="sec">
-  <div class="sh"><h2>Fund Sources</h2><p>Track where your construction money comes from</p></div>
-  <div class="card">
-    <div class="ch"><div class="ct">Add New Source</div></div>
-    <div class="fg fg3">
-      <div class="fd"><label>Source Name</label><input id="src-name" placeholder="e.g. Dad, SBI Loan…"/></div>
-      <div class="fd"><label>Type</label><select id="src-type"><option value="personal">Personal / Family</option><option value="loan">Bank Loan</option><option value="savings">Savings</option><option value="other">Other</option></select></div>
-      <div class="fd"><label>Total Sanctioned (₹)</label><input type="number" id="src-total" placeholder="e.g. 1000000"/></div>
-    </div>
-    <div class="fg mt2" style="grid-template-columns:1fr 1fr 2fr">
-      <div class="fd"><label>Amount Received (₹)</label><input type="number" id="src-recv" placeholder="In hand now"/></div>
-      <div class="fd"><label>Date</label><input type="date" id="src-date"/></div>
-      <div class="fd"><label>Notes</label><input id="src-notes" placeholder="Optional…"/></div>
-    </div>
-    <div class="mt3"><button class="btn bp" onclick="addSource()">＋ Add Source</button></div>
-  </div>
-  <div class="src-grid" id="src-grid"></div>
-</section>
-
-<!-- EXPENSES -->
-<section id="sec-expenses" class="sec">
-  <div class="sh"><h2>Expenses</h2><p>Record all construction payments</p></div>
-  <div class="card">
-    <div class="ch"><div class="ct">Add New Expense</div></div>
-    <div class="fg fg3">
-      <div class="fd"><label>Date</label><input type="date" id="exp-date"/></div>
-      <div class="fd"><label>Category</label><select id="exp-cat"></select></div>
-      <div class="fd"><label>Paid From (Source)</label><select id="exp-src"></select></div>
-    </div>
-    <div class="fg mt2">
-      <div class="fd"><label>Description</label><input id="exp-desc" placeholder="e.g. Builder payment – Phase 2"/></div>
-      <div class="fd"><label>Amount (₹)</label><input type="number" id="exp-amt" placeholder="e.g. 50000"/></div>
-    </div>
-    <div class="fd mt2"><label>Notes</label><textarea id="exp-notes" placeholder="Receipt no., contractor details…"></textarea></div>
-    <div class="mt3 flex gap2">
-      <button class="btn bp" onclick="addExpense()">＋ Add Expense</button>
-      <button class="btn bs" onclick="go('import')">📥 Bulk Import</button>
-    </div>
-  </div>
-  <div class="chips" id="exp-chips"></div>
-  <div class="card">
-    <div class="ch">
-      <div class="ct">Expense Log</div>
-      <div class="flex gap2" style="align-items:center;flex-wrap:wrap">
-        <span id="exp-count" class="tm mono" style="font-size:13px">0 entries</span>
-        <button class="btn bgr sm" onclick="exportXLSX()">⬇ Excel (.xls)</button>
-        <button class="btn bs sm" onclick="exportCSV()">⬇ CSV</button>
-      </div>
-    </div>
-    <div class="tw"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Source</th><th>Notes</th><th class="tr">Amount</th><th></th></tr></thead><tbody id="exp-body"></tbody></table></div>
-    <div class="divider"></div>
-    <div class="flex" style="justify-content:flex-end;align-items:center;gap:16px">
-      <span class="tm" style="font-size:13px">Total shown:</span>
-      <span id="exp-total" class="mono fw6" style="font-size:18px">₹0</span>
-    </div>
-  </div>
-</section>
-
-<!-- BULK IMPORT -->
-<section id="sec-import" class="sec">
-  <div class="sh"><h2>Bulk Import</h2><p>Upload multiple expenses at once via CSV</p></div>
-  <div class="card">
-    <div class="ch"><div class="ct">Step 1 — Prepare your CSV</div></div>
-    <div class="info-box">Required columns: <strong>date</strong> (DD/MM/YYYY or YYYY-MM-DD) · <strong>description</strong> · <strong>amount</strong> — Optional: <strong>category</strong> · <strong>source</strong> · <strong>notes</strong><br>Category and Source must match names you've already created (case-insensitive). Unknown categories will be auto-created.</div>
-    <div class="flex gap2" style="flex-wrap:wrap">
-      <button class="btn bs" onclick="dlTemplate()">⬇ Download Template</button>
-      <button class="btn bs" onclick="copyTemplate()">📋 Copy Sample</button>
-    </div>
-  </div>
-  <div class="card">
-    <div class="ch"><div class="ct">Step 2 — Upload or Paste</div></div>
-    <div class="flex gap2 mt1" style="margin-bottom:16px">
-      <button class="btn bp sm" id="tab-up" onclick="swTab('up')">📁 Upload File</button>
-      <button class="btn bs sm" id="tab-pa" onclick="swTab('pa')">📋 Paste CSV</button>
-    </div>
-    <div id="pane-up">
-      <div class="uz" id="uz" ondragover="dov(event)" ondragleave="dlv()" ondrop="ddrop(event)">
-        <input type="file" accept=".csv,text/csv" onchange="fsel(event)"/>
-        <div class="uz-icon">📂</div>
-        <p>Drop your CSV here or <strong>click to browse</strong></p>
-        <small>Accepts .csv · UTF-8 encoding</small>
-      </div>
-    </div>
-    <div id="pane-pa" style="display:none">
-      <div class="fd"><label>Paste CSV text</label><textarea id="paste-csv" style="min-height:160px;font-family:'IBM Plex Mono',monospace;font-size:12px" placeholder="date,description,amount,category,source,notes&#10;01/01/2025,Builder payment,150000,Builder Payment,SBI Loan,Receipt #001"></textarea></div>
-      <div class="mt2"><button class="btn bp" onclick="parsePaste()">Parse</button></div>
-    </div>
-  </div>
-  <div class="card" id="prev-card" style="display:none">
-    <div class="ch"><div class="ct">Step 3 — Review &amp; Import</div><span id="prev-stats" class="tm mono" style="font-size:12px"></span></div>
-    <div class="warn-box" id="imp-warn" style="display:none"></div>
-    <div class="ptw"><table><thead><tr><th>#</th><th>Date</th><th>Description</th><th>Amount</th><th>Category</th><th>Source</th><th>Notes</th><th>Status</th></tr></thead><tbody id="prev-body"></tbody></table></div>
-    <div class="ma">
-      <button class="btn bs" onclick="clearImp()">Clear</button>
-      <button class="btn bp" id="imp-btn" onclick="doImport()">✓ Import Valid Rows</button>
-    </div>
-  </div>
-</section>
-
-<!-- CATEGORIES -->
-<section id="sec-categories" class="sec">
-  <div class="sh"><h2>Categories</h2><p>Customize expense categories for your project</p></div>
-  <div class="card">
-    <div class="ch"><div class="ct">Add Category</div></div>
-    <div class="fg" style="grid-template-columns:1fr 60px auto;align-items:flex-end;gap:12px">
-      <div class="fd"><label>Category Name</label><input id="cat-name" placeholder="e.g. Plumbing, Electricals…"/></div>
-      <div class="fd"><label>Color</label><input type="color" id="cat-color" value="#c17f3a" style="height:43px;padding:4px 6px;cursor:pointer"/></div>
-      <button class="btn bp" onclick="addCat()">＋ Add</button>
-    </div>
-  </div>
-  <div class="card"><div class="ch"><div class="ct">All Categories</div></div><div id="cat-list" class="flex gap2" style="flex-wrap:wrap;min-height:60px;align-items:flex-start"></div></div>
-</section>
-
-<!-- ANALYTICS -->
-<section id="sec-analytics" class="sec">
-  <div class="sh"><h2>Analytics</h2><p>Understand your construction spending</p></div>
-  <div class="sg">
-    <div class="sc t1"><div class="sl">Total Budget</div><div class="sv" id="an-total">₹0</div></div>
-    <div class="sc t2"><div class="sl">Spent</div><div class="sv" id="an-spent">₹0</div></div>
-    <div class="sc t3"><div class="sl">Remaining</div><div class="sv" id="an-rem">₹0</div></div>
-    <div class="sc t4"><div class="sl">Burn Rate</div><div class="sv" id="an-burn">0%</div></div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-    <div class="card"><div class="ch"><div class="ct">By Category</div></div><div id="an-cat" class="bc"><div class="empty"><p>No data yet</p></div></div></div>
-    <div class="card"><div class="ch"><div class="ct">By Source</div></div><div id="an-src"><div class="empty"><p>No data yet</p></div></div></div>
-  </div>
-  <div class="card" style="margin-top:20px"><div class="ch"><div class="ct">Monthly Spending</div></div><div id="an-month" class="bc"><div class="empty"><p>No data yet</p></div></div></div>
-  <div class="card" style="margin-top:20px"><div class="ch"><div class="ct">Source Utilization</div></div><div id="an-util"><div class="empty"><p>No sources yet</p></div></div></div>
-</section>
-
-</main>
-</div>
-
-<!-- MODALS -->
-<div class="mo" id="mo-updsrc">
-  <div class="modal">
-    <h3>Update Received Amount</h3>
-    <p class="msub">Record additional money received from this source</p>
-    <input type="hidden" id="us-id"/>
-    <!-- Source context summary -->
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:20px;font-size:13px;">
-      <div style="font-weight:700;font-size:15px;margin-bottom:8px;color:var(--ink)" id="us-src-name">—</div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;color:var(--muted)">
-        <span>Total sanctioned: <strong style="color:var(--ink2)" id="us-src-total">—</strong></span>
-        <span>Received so far: <strong style="color:var(--success)" id="us-src-recv">—</strong></span>
-        <span>Yet to receive: <strong style="color:var(--accent)" id="us-src-avail">—</strong></span>
-      </div>
-    </div>
-    <div id="us-hint" style="display:none;background:var(--accent-light);border:1px solid #d4b080;border-radius:8px;padding:10px 14px;font-size:12px;color:#7a4a10;margin-bottom:16px;">
-      ℹ️ You've already received 100% of the sanctioned amount. If you received more, this will automatically update the total sanctioned figure.
-    </div>
-    <div class="fd"><label>New Amount Received (₹)</label><input type="number" id="us-amt" placeholder="e.g. 1000000 (enter the new amount received)"/></div>
-    <div class="fd mt2"><label>Date Received</label><input type="date" id="us-date"/></div>
-    <div class="fd mt2"><label>Notes</label><input id="us-notes" placeholder="e.g. Second tranche, Jan disbursement…"/></div>
-    <div class="ma"><button class="btn bs" onclick="cm('mo-updsrc')">Cancel</button><button class="btn bp" onclick="doUpdSrc()">✓ Update</button></div>
-  </div>
-</div>
-
-<div class="mo" id="mo-del">
-  <div class="modal">
-    <h3>Confirm Delete</h3><p id="del-msg" style="color:var(--muted);margin-top:8px;font-size:14px">Are you sure?</p>
-    <div class="ma"><button class="btn bs" onclick="cm('mo-del')">Cancel</button><button class="btn bd" onclick="doDel()">Delete</button></div>
-  </div>
-</div>
-
-<div class="mo" id="mo-drive">
-  <div class="modal wide">
-    <h3>☁️ Google Drive Sync</h3>
-    <p class="msub">Save your BuildLedger data to Google Drive — backed up and accessible from any device.</p>
-    <div id="drv-dis">
-      <div class="ds">
-        <div class="dsn">Step 1 — Google Cloud Console</div>
-        <p>Go to <strong>console.cloud.google.com</strong> → Create/select a project → Enable <strong>Google Drive API</strong> → Enable <strong>Google Picker API</strong>.</p>
-      </div>
-      <div class="ds">
-        <div class="dsn">Step 2 — Create Credentials</div>
-        <p>Go to <strong>Credentials</strong> → Create <strong>API Key</strong> → Also create an <strong>OAuth 2.0 Client ID</strong> (Web application). Add <code>https://jnaashish.github.io</code> as an Authorised JavaScript Origin.</p>
-      </div>
-      <div class="ds">
-        <div class="dsn">Step 3 — Enter credentials</div>
-        <input id="drv-cid" placeholder="OAuth Client ID (…apps.googleusercontent.com)"/>
-        <input id="drv-key" placeholder="API Key (AIza…)" style="margin-top:8px"/>
-      </div>
-      <div class="ds" style="border:1.5px solid #aac0e8;background:var(--accent2-light)">
-        <div class="dsn" style="color:var(--accent2)">Optional — Load Shared Data</div>
-        <p style="color:var(--accent2)">If someone shared their Drive file ID with you, paste it here to load their data directly (read-only pull).</p>
-        <input id="drv-shared-id" placeholder="Shared Google Drive File ID (optional)" style="border-color:#aac0e8"/>
-      </div>
-      <div class="ma"><button class="btn bs" onclick="cm('mo-drive')">Cancel</button><button class="btn bbl" onclick="loadSharedFile()" id="btn-load-shared" style="display:none">⬇ Load Shared File</button><button class="btn bp" onclick="connectDrive()">🔗 Connect to Drive</button></div>
-    </div>
-    <div id="drv-con" style="display:none">
-      <div class="info-box">✅ Connected! Data auto-saves to <strong>BuildLedger_data.json</strong> in your Google Drive.</div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px">
-        <div style="font-weight:600;margin-bottom:6px;color:var(--ink2)">📋 Your File ID (share this with others)</div>
-        <div id="drv-file-id-display" class="mono" style="font-size:11px;color:var(--muted);word-break:break-all;background:var(--bg2);padding:8px;border-radius:6px;margin-bottom:8px">—</div>
-        <button class="btn bs sm" onclick="copyFileId()">Copy File ID</button>
-      </div>
-      <div class="flex gap2" style="flex-wrap:wrap;margin-top:8px">
-        <button class="btn bgr" onclick="saveDrive()">⬆ Save Now</button>
-        <button class="btn bbl" onclick="loadDrive()">⬇ Load from Drive</button>
-        <button class="btn bd" onclick="disDrive()">Disconnect</button>
-      </div>
-      <div style="margin-top:16px;font-size:13px;color:var(--muted)">Last synced: <span id="last-sync">never</span></div>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
+<!-- 1. UPDATE RECEIVED LABEL -->
+<label>Total Received So Far (₹)</label>
+<input type="number" id="us-amt" placeholder="Enter cumulative received amount"/>
 
 <script>
-// ━━━ STATE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let S = {
-  sources:[], expenses:[],
-  categories:[
-    {id:'builder',name:'Builder Payment',color:'#c17f3a'},
-    {id:'materials',name:'Materials',color:'#3a6bc1'},
-    {id:'labour',name:'Labour',color:'#3a9c6b'},
-    {id:'interiors',name:'Interiors',color:'#9c3a9c'},
-    {id:'govt',name:'Govt / Approvals',color:'#6b4a20'},
-    {id:'misc',name:'Miscellaneous',color:'#6b8a3a'},
-  ]
-};
-let pDel=null, expFilt='all', impData=[];
-let drv={clientId:'',apiKey:'',fileId:'',connected:false};
-let drvToken=null, gapiOk=false, syncTimer=null;
-
-// ━━━ PERSIST ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function save(){localStorage.setItem('bl2',JSON.stringify(S));localStorage.setItem('bld',JSON.stringify(drv));if(drv.connected&&drvToken)schedSync();}
-function load(){try{const r=localStorage.getItem('bl2');if(r)S=JSON.parse(r);}catch(e){}try{const r=localStorage.getItem('bld');if(r)drv=JSON.parse(r);}catch(e){}}
-
-// ━━━ NAV ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function go(id){
-  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
-  document.getElementById('sec-'+id).classList.add('active');
-  document.querySelectorAll('.nb').forEach(b=>{if(b.getAttribute('onclick')?.includes("'"+id+"'"))b.classList.add('active');});
-  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{}})[id]?.();
-}
-
-// ━━━ UTILS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function fmt(n){return'₹'+Number(n||0).toLocaleString('en-IN')}
-function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
-function toast(m,t='s'){const e=document.getElementById('toast');e.textContent=m;e.className='toast show '+t;setTimeout(()=>e.className='toast',3500);}
-function om(id){document.getElementById(id).classList.add('open')}
-function cm(id){document.getElementById(id).classList.remove('open')}
-function fd(d){if(!d)return'';const[y,m,day]=d.split('-');return`${day}/${m}/${y}`}
-function pd(s){
-  if(!s)return null; s=s.trim();
-  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
-  const m=s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
-  if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  return null;
-}
-
-// ━━━ CATEGORIES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function addCat(){
-  const n=document.getElementById('cat-name').value.trim(),c=document.getElementById('cat-color').value;
-  if(!n){toast('Enter name','e');return}
-  if(S.categories.find(x=>x.name.toLowerCase()===n.toLowerCase())){toast('Already exists','e');return}
-  S.categories.push({id:uid(),name:n,color:c});
-  document.getElementById('cat-name').value='';
-  save();renderCats();refreshDrops();
-  toast('Category added!');
-}
-function delCat(id){
-  if(S.expenses.some(e=>e.category===id)){toast('In use — cannot delete','e');return}
-  pDel={type:'category',id};
-  document.getElementById('del-msg').textContent=`Delete category "${S.categories.find(c=>c.id===id)?.name}"?`;
-  om('mo-del');
-}
-function renderCats(){
-  const el=document.getElementById('cat-list');
-  el.innerHTML=S.categories.map(c=>`<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;padding:7px 14px 7px 10px"><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span style="font-size:14px;font-weight:500;color:var(--ink2)">${c.name}</span><button onclick="delCat('${c.id}')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:0 0 0 4px">×</button></div>`).join('')||'<div class="empty"><p>No categories yet</p></div>';
-}
-
-// ━━━ SOURCES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function addSource(){
-  const name=document.getElementById('src-name').value.trim();
-  const type=document.getElementById('src-type').value;
-  const total=parseFloat(document.getElementById('src-total').value)||0;
-  const recv=parseFloat(document.getElementById('src-recv').value)||0;
-  const date=document.getElementById('src-date').value;
-  const notes=document.getElementById('src-notes').value.trim();
-  if(!name){toast('Enter source name','e');return}
-  if(total<=0){toast('Total must be >0','e');return}
-  if(recv>total){toast('Received cannot exceed total','e');return}
-  S.sources.push({id:uid(),name,type,total,recv,date,notes,history:[]});
-  ['src-name','src-total','src-recv','src-date','src-notes'].forEach(i=>document.getElementById(i).value='');
-  save();renderSrc();refreshDrops();toast('Source added!');
-}
-function openUpdSrc(id){
-  const src=S.sources.find(s=>s.id===id);
-  if(!src)return;
-  document.getElementById('us-id').value=id;
-  document.getElementById('us-amt').value='';
-  document.getElementById('us-notes').value='';
-  document.getElementById('us-date').value=new Date().toISOString().split('T')[0];
-  // Show source context in modal
-  document.getElementById('us-src-name').textContent=src.name;
-  document.getElementById('us-src-total').textContent=fmt(src.total);
-  document.getElementById('us-src-recv').textContent=fmt(src.recv);
-  document.getElementById('us-src-avail').textContent=fmt(src.total-src.recv);
-  document.getElementById('us-hint').style.display=src.recv>=src.total?'':'none';
-  om('mo-updsrc');
-}
+// 1. FIX: CUMULATIVE UPDATE LOGIC
 function doUpdSrc(){
   const id=document.getElementById('us-id').value;
-  const extra=parseFloat(document.getElementById('us-amt').value)||0;
+  const newTotalReceived=parseFloat(document.getElementById('us-amt').value)||0;
   const notes=document.getElementById('us-notes').value.trim();
   const date=document.getElementById('us-date').value;
-  if(extra<=0){toast('Enter valid amount','e');return}
+
   const src=S.sources.find(s=>s.id===id);
   if(!src)return;
-  // KEY FIX: If received would exceed total sanctioned, auto-expand the total
-  // This handles the case where someone initially underestimated or received more than sanctioned
-  if(src.recv+extra>src.total){
-    src.total=src.recv+extra; // Auto-expand total to accommodate
+
+  if(newTotalReceived<=src.recv){
+    toast('Must be greater than current received','e');
+    return;
   }
-  src.recv+=extra;
+
+  if(newTotalReceived>src.total){
+    src.total=newTotalReceived;
+  }
+
+  const diff=newTotalReceived-src.recv;
+  src.recv=newTotalReceived;
+
   src.history=src.history||[];
-  src.history.push({date,amount:extra,notes});
-  save();cm('mo-updsrc');renderSrc();renderDash();
-  toast(`✓ ${src.name} updated +${fmt(extra)}`);
-}
-function delSrc(id){
-  if(S.expenses.some(e=>e.source===id)){toast('Used in expenses — cannot delete','e');return}
-  pDel={type:'source',id};
-  document.getElementById('del-msg').textContent=`Delete source "${S.sources.find(s=>s.id===id)?.name}"?`;
-  om('mo-del');
-}
-function srcSpent(id){return S.expenses.filter(e=>e.source===id).reduce((s,e)=>s+e.amount,0)}
-function renderSrc(){
-  const g=document.getElementById('src-grid');
-  if(!S.sources.length){g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ei">💳</div><p>No sources yet</p></div>';return}
-  const TL={personal:'Personal / Family',loan:'Bank Loan',savings:'Savings',other:'Other'};
-  const TC={personal:'bo',loan:'bb',savings:'bg',other:'br'};
-  g.innerHTML=S.sources.map(src=>{
-    const sp=srcSpent(src.id);
-    const pr=src.total?Math.min(100,Math.round(src.recv/src.total*100)):0;
-    const ps=src.recv?Math.min(100,Math.round(sp/src.recv*100)):0;
-    return`<div class="src-card">
-      <div class="src-type"><span class="badge ${TC[src.type]||'bo'}">${TL[src.type]||src.type}</span>${src.date?`<span style="font-size:11px;color:var(--muted);margin-left:8px">${fd(src.date)}</span>`:''}</div>
-      <div class="src-name">${src.name}</div>
-      <div class="src-row"><span>Total Sanctioned</span><strong>${fmt(src.total)}</strong></div>
-      <div class="src-row"><span>Received</span><strong>${fmt(src.recv)} <span style="color:var(--muted);font-weight:400">(${pr}%)</span></strong></div>
-      <div class="pw"><div class="pb used" style="width:${pr}%"></div></div>
-      <div style="height:8px"></div>
-      <div class="src-row"><span>Spent from this</span><strong style="color:var(--danger)">${fmt(sp)} <span style="color:var(--muted);font-weight:400">(${ps}%)</span></strong></div>
-      <div class="pw"><div class="pb spent" style="width:${ps}%"></div></div>
-      <div class="src-row mt1"><span>Still available</span><strong style="color:var(--success)">${fmt(src.recv-sp)}</strong></div>
-      <div class="src-row"><span>Yet to draw</span><strong style="color:var(--accent)">${fmt(src.total-src.recv)}</strong></div>
-      ${src.notes?`<div style="font-size:12px;color:var(--muted);margin-top:8px;font-style:italic">${src.notes}</div>`:''}
-      <div class="src-actions">
-        <button class="btn bs sm" onclick="openUpdSrc('${src.id}')">＋ Update Received</button>
-        <button class="btn bd sm" onclick="delSrc('${src.id}')">Delete</button>
-      </div>
-    </div>`;
-  }).join('');
+  src.history.push({date,amount:diff,notes});
+
+  save();
+  saveToCloud();
+
+  cm('mo-updsrc');
+  renderSrc();
+  renderDash();
+
+  toast('Updated successfully');
 }
 
-// ━━━ EXPENSES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function refreshDrops(){
-  const cs=document.getElementById('exp-cat'),ss=document.getElementById('exp-src');
-  if(cs)cs.innerHTML=S.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  if(ss)ss.innerHTML='<option value="">— No specific source —</option>'+S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-}
-function addExpense(){
-  const date=document.getElementById('exp-date').value;
-  const cat=document.getElementById('exp-cat').value;
-  const source=document.getElementById('exp-src').value;
-  const desc=document.getElementById('exp-desc').value.trim();
-  const amount=parseFloat(document.getElementById('exp-amt').value)||0;
-  const notes=document.getElementById('exp-notes').value.trim();
-  if(!date){toast('Select date','e');return}
-  if(!desc){toast('Enter description','e');return}
-  if(amount<=0){toast('Enter valid amount','e');return}
-  S.expenses.push({id:uid(),date,category:cat,source,desc,amount,notes});
-  S.expenses.sort((a,b)=>b.date.localeCompare(a.date));
-  ['exp-date','exp-desc','exp-amt','exp-notes'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
-  save();renderExp();renderDash();toast('Expense added!');
-}
-function delExp(id){
-  pDel={type:'expense',id};
-  document.getElementById('del-msg').textContent=`Delete expense "${S.expenses.find(e=>e.id===id)?.desc}"?`;
-  om('mo-del');
-}
-function filtExp(cat,el){expFilt=cat;document.querySelectorAll('#exp-chips .chip').forEach(c=>c.classList.remove('active'));if(el)el.classList.add('active');renderExpTable();}
-function renderExp(){
-  refreshDrops();
-  const ch=document.getElementById('exp-chips');
-  ch.innerHTML=`<div class="chip ${expFilt==='all'?'active':''}" onclick="filtExp('all',this)">All</div>`+S.categories.map(c=>`<div class="chip ${expFilt===c.id?'active':''}" onclick="filtExp('${c.id}',this)">${c.name}</div>`).join('');
-  renderExpTable();
-}
-function renderExpTable(){
-  const body=document.getElementById('exp-body');
-  const fil=expFilt==='all'?S.expenses:S.expenses.filter(e=>e.category===expFilt);
-  document.getElementById('exp-count').textContent=fil.length+' entries';
-  document.getElementById('exp-total').textContent=fmt(fil.reduce((s,e)=>s+e.amount,0));
-  if(!fil.length){body.innerHTML='<tr><td colspan="7"><div class="empty"><div class="ei">🧾</div><p>No expenses yet</p></div></td></tr>';return}
-  body.innerHTML=fil.map(e=>{
-    const cat=S.categories.find(c=>c.id===e.category);
-    const src=S.sources.find(s=>s.id===e.source);
-    return`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fd(e.date)}</td><td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${cat?.color||'#aaa'};flex-shrink:0"></span>${cat?.name||'—'}</span></td><td>${e.desc}</td><td>${src?`<span class="badge bb">${src.name}</span>`:'<span style="color:var(--muted)">—</span>'}</td><td style="font-size:12px;color:var(--muted)">${e.notes||'—'}</td><td class="tr mono fw6">${fmt(e.amount)}</td><td><button class="btn bd sm" onclick="delExp('${e.id}')">×</button></td></tr>`;
-  }).join('');
-}
-function exportCSV(){
-  const rows=[['date','description','amount','category','source','notes']];
-  S.expenses.forEach(e=>{const cat=S.categories.find(c=>c.id===e.category);const src=S.sources.find(s=>s.id===e.source);rows.push([fd(e.date),e.desc,e.amount,cat?.name||'',src?.name||'',e.notes||'']);});
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='buildledger_'+new Date().toISOString().split('T')[0]+'.csv';a.click();toast('CSV exported — open in Excel!');
+// 2. FIREBASE SETUP (REPLACE YOUR KEYS)
+const firebaseConfig = {
+  apiKey: "AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",
+  authDomain: "construction-expensis.firebaseapp.com",
+  projectId: "construction-expensis",
+};
+
+let db;
+
+function initFirebase(){
+  if(!window.firebase)return;
+  const app = firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
 }
 
-function exportXLSX(){
-  // Build a full Excel-compatible workbook as XML (SpreadsheetML) — opens natively in Excel
-  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const cell=(v,t='String')=>t==='Number'?`<Cell><Data ss:Type="Number">${v}</Data></Cell>`:`<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
-  const hdr=v=>`<Cell ss:StyleID="hdr"><Data ss:Type="String">${esc(v)}</Data></Cell>`;
-  const row=cells=>`<Row>${cells.join('')}</Row>`;
-
-  // Sheet 1: Expenses
-  const expRows=[row([hdr('Date'),hdr('Category'),hdr('Description'),hdr('Source'),hdr('Amount (₹)'),hdr('Notes')])];
-  S.expenses.forEach(e=>{
-    const cat=S.categories.find(c=>c.id===e.category);
-    const src=S.sources.find(s=>s.id===e.source);
-    expRows.push(row([cell(fd(e.date)),cell(cat?.name||''),cell(e.desc),cell(src?.name||''),cell(e.amount,'Number'),cell(e.notes||'')]));
-  });
-  const totalAmt=S.expenses.reduce((s,e)=>s+e.amount,0);
-  expRows.push(row([cell(''),cell(''),cell(''),cell('TOTAL',),cell(totalAmt,'Number'),cell('')]));
-
-  // Sheet 2: Sources
-  const srcRows=[row([hdr('Source Name'),hdr('Type'),hdr('Total Sanctioned (₹)'),hdr('Total Received (₹)'),hdr('Total Spent (₹)'),hdr('Available (₹)'),hdr('Yet to Draw (₹)'),hdr('Date'),hdr('Notes')])];
-  S.sources.forEach(src=>{
-    const sp=srcSpent(src.id);
-    srcRows.push(row([cell(src.name),cell(src.type),cell(src.total,'Number'),cell(src.recv,'Number'),cell(sp,'Number'),cell(src.recv-sp,'Number'),cell(src.total-src.recv,'Number'),cell(fd(src.date)),cell(src.notes||'')]));
-  });
-
-  // Sheet 3: Category Summary
-  const catTotals={};S.categories.forEach(c=>catTotals[c.id]=0);S.expenses.forEach(e=>{if(catTotals[e.category]!==undefined)catTotals[e.category]+=e.amount;});
-  const catRows=[row([hdr('Category'),hdr('Total Spent (₹)'),hdr('% of Total')])];
-  const grandTotal=S.expenses.reduce((s,e)=>s+e.amount,0)||1;
-  S.categories.filter(c=>catTotals[c.id]>0).sort((a,b)=>catTotals[b.id]-catTotals[a.id]).forEach(c=>{
-    catRows.push(row([cell(c.name),cell(catTotals[c.id],'Number'),cell(Math.round(catTotals[c.id]/grandTotal*100)+'%')]));
-  });
-
-  const xl=`<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:x="urn:schemas-microsoft-com:office:excel">
-<Styles>
-  <Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#F0E0C8" ss:Pattern="Solid"/></Style>
-</Styles>
-<Worksheet ss:Name="Expenses"><Table>${expRows.join('')}</Table></Worksheet>
-<Worksheet ss:Name="Sources"><Table>${srcRows.join('')}</Table></Worksheet>
-<Worksheet ss:Name="Category Summary"><Table>${catRows.join('')}</Table></Worksheet>
-</Workbook>`;
-  const a=document.createElement('a');
-  a.href='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(xl);
-  a.download='BuildLedger_'+new Date().toISOString().split('T')[0]+'.xls';
-  a.click();toast('✓ Excel file downloaded!');
+function saveToCloud(){
+  if(!db)return;
+  db.collection("ledger").doc("shared").set(S);
 }
 
-// ━━━ BULK IMPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function swTab(t){
-  document.getElementById('pane-up').style.display=t==='up'?'':'none';
-  document.getElementById('pane-pa').style.display=t==='pa'?'':'none';
-  document.getElementById('tab-up').className='btn sm '+(t==='up'?'bp':'bs');
-  document.getElementById('tab-pa').className='btn sm '+(t==='pa'?'bp':'bs');
-}
-function dlTemplate(){
-  const csv='date,description,amount,category,source,notes\n01/01/2025,Builder payment – Phase 1,150000,Builder Payment,SBI Loan,Receipt #001\n15/01/2025,Sand and aggregate,25000,Materials,,\n20/01/2025,Site labour wages,18000,Labour,Dad,Jan week 3';
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='buildledger_template.csv';a.click();toast('Template downloaded!');
-}
-function copyTemplate(){
-  navigator.clipboard.writeText('date,description,amount,category,source,notes\n01/01/2025,Builder payment,150000,Builder Payment,SBI Loan,Receipt #001\n15/01/2025,Sand and aggregate,25000,Materials,,\n20/01/2025,Site labour wages,18000,Labour,,Jan week 3').then(()=>toast('Sample copied!'));
-}
-function dov(e){e.preventDefault();document.getElementById('uz').classList.add('dov')}
-function dlv(){document.getElementById('uz').classList.remove('dov')}
-function ddrop(e){e.preventDefault();dlv();const f=e.dataTransfer.files[0];if(f)readFile(f);}
-function fsel(e){const f=e.target.files[0];if(f)readFile(f);}
-function readFile(f){const r=new FileReader();r.onload=e=>procCSV(e.target.result);r.readAsText(f,'UTF-8');}
-function parsePaste(){const t=document.getElementById('paste-csv').value.trim();if(!t){toast('Paste CSV text first','e');return}procCSV(t);}
-function procCSV(txt){
-  txt=txt.replace(/^\uFEFF/,'');
-  const lines=txt.split(/\r?\n/).filter(l=>l.trim());
-  if(lines.length<2){toast('Need header + at least 1 data row','e');return}
-  const hdr=parseL(lines[0]).map(h=>h.toLowerCase().trim());
-  const ix={date:hdr.indexOf('date'),desc:Math.max(hdr.indexOf('description'),hdr.indexOf('desc')),amt:hdr.indexOf('amount'),cat:hdr.indexOf('category'),src:hdr.indexOf('source'),notes:Math.max(hdr.indexOf('notes'),hdr.indexOf('note'))};
-  if(ix.date<0||ix.desc<0||ix.amt<0){toast('Missing required columns: date, description, amount','e');return}
-  const rows=[];
-  for(let i=1;i<lines.length;i++){
-    if(!lines[i].trim())continue;
-    const cols=parseL(lines[i]);
-    const rDate=cols[ix.date]||'',rDesc=(cols[ix.desc]||'').trim(),rAmt=cols[ix.amt]||'',rCat=ix.cat>=0?(cols[ix.cat]||'').trim():'',rSrc=ix.src>=0?(cols[ix.src]||'').trim():'',rNotes=ix.notes>=0?(cols[ix.notes]||'').trim():'';
-    const errs=[];
-    const pDate=pd(rDate);if(!pDate)errs.push('Invalid date');
-    if(!rDesc)errs.push('Missing description');
-    const amount=parseFloat(rAmt.replace(/[^0-9.]/g,''));if(!amount||amount<=0)errs.push('Invalid amount');
-    let catId='';
-    if(rCat){const m=S.categories.find(c=>c.name.toLowerCase()===rCat.toLowerCase());if(m)catId=m.id;else{catId=uid();if(!errs.length)S.categories.push({id:catId,name:rCat,color:'#8a7d6a'});}}
-    else catId=S.categories[0]?.id||'';
-    let srcId='';
-    if(rSrc){const m=S.sources.find(s=>s.name.toLowerCase()===rSrc.toLowerCase());if(m)srcId=m.id;else errs.push(`Source "${rSrc}" not found`);}
-    rows.push({i,rDate,rDesc,rAmt,rCat,rSrc,rNotes,pDate,amount,catId,srcId,errs});
-  }
-  impData=rows;renderPrev(rows);
-}
-function parseL(line){
-  const res=[];let cur='',inQ=false;
-  for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){res.push(cur.trim());cur='';}else cur+=c;}
-  res.push(cur.trim());return res;
-}
-function renderPrev(rows){
-  document.getElementById('prev-card').style.display='';
-  const ok=rows.filter(r=>!r.errs.length),er=rows.filter(r=>r.errs.length);
-  document.getElementById('prev-stats').textContent=`${ok.length} valid · ${er.length} errors`;
-  const w=document.getElementById('imp-warn');
-  if(er.length){w.style.display='';w.innerHTML=`⚠ ${er.length} row(s) have errors and will be skipped.`;}else w.style.display='none';
-  document.getElementById('imp-btn').textContent=`✓ Import ${ok.length} Valid Row${ok.length!==1?'s':''}`;
-  document.getElementById('prev-body').innerHTML=rows.map(r=>{
-    const cat=S.categories.find(c=>c.id===r.catId);const src=S.sources.find(s=>s.id===r.srcId);const ok=!r.errs.length;
-    return`<tr class="${ok?'rok':'rerr'}"><td>${r.i}</td><td class="mono" style="font-size:12px">${r.rDate}</td><td>${r.rDesc}</td><td class="mono tr">${r.rAmt}</td><td>${cat?.name||r.rCat||'—'}</td><td>${src?.name||r.rSrc||'—'}</td><td style="font-size:12px">${r.rNotes||'—'}</td><td>${ok?'<span class="badge bg">✓ OK</span>':`<span class="badge br" title="${r.errs.join(', ')}">⚠ ${r.errs[0]}</span>`}</td></tr>`;
-  }).join('');
-}
-function doImport(){
-  const valid=impData.filter(r=>!r.errs.length);if(!valid.length){toast('No valid rows','e');return}
-  valid.forEach(r=>S.expenses.push({id:uid(),date:r.pDate,category:r.catId,source:r.srcId,desc:r.rDesc,amount:r.amount,notes:r.rNotes}));
-  S.expenses.sort((a,b)=>b.date.localeCompare(a.date));
-  save();clearImp();renderDash();renderCats();
-  toast(`✓ ${valid.length} expense${valid.length!==1?'s':''} imported!`);
-  go('expenses');
-}
-function clearImp(){impData=[];document.getElementById('prev-card').style.display='none';document.getElementById('paste-csv').value='';}
-
-// ━━━ DASHBOARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function renderDash(){
-  const tF=S.sources.reduce((s,x)=>s+x.recv,0);
-  const tS=S.sources.reduce((s,x)=>s+x.total,0);
-  const tE=S.expenses.reduce((s,e)=>s+e.amount,0);
-  document.getElementById('s-total').textContent=fmt(tF);
-  document.getElementById('s-spent').textContent=fmt(tE);
-  document.getElementById('s-balance').textContent=fmt(tF-tE);
-  document.getElementById('s-uncommitted').textContent=fmt(tS-tF);
-  const body=document.getElementById('d-exp-body');
-  const rec=S.expenses.slice(0,8);
-  if(!rec.length){body.innerHTML='<tr><td colspan="5"><div class="empty"><div class="ei">🧱</div><p>No expenses yet</p></div></td></tr>';}
-  else body.innerHTML=rec.map(e=>{const cat=S.categories.find(c=>c.id===e.category);const src=S.sources.find(s=>s.id===e.source);return`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fd(e.date)}</td><td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${cat?.color||'#aaa'};flex-shrink:0"></span>${cat?.name||'—'}</span></td><td>${e.desc}</td><td>${src?`<span class="badge bb">${src.name}</span>`:'—'}</td><td class="tr mono fw6">${fmt(e.amount)}</td></tr>`;}).join('');
-  const list=document.getElementById('d-src-list');
-  if(!S.sources.length){list.innerHTML='<div class="empty"><div class="ei">💳</div><p>No sources added yet</p></div>';return}
-  list.innerHTML=S.sources.map(src=>{const sp=srcSpent(src.id);const p=src.recv?Math.min(100,Math.round(sp/src.recv*100)):0;return`<div style="padding:12px 0;border-bottom:1px solid var(--bg2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:600">${src.name}</span><span class="mono" style="font-size:13px"><span style="color:var(--danger)">${fmt(sp)}</span> spent / <span style="color:var(--success)">${fmt(src.recv)}</span> received</span></div><div class="pw"><div class="pb spent" style="width:${p}%"></div></div></div>`;}).join('');
-}
-
-// ━━━ ANALYTICS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function renderAn(){
-  const tF=S.sources.reduce((s,x)=>s+x.recv,0);
-  const tE=S.expenses.reduce((s,e)=>s+e.amount,0);
-  const burn=tF?Math.round(tE/tF*100):0;
-  document.getElementById('an-total').textContent=fmt(tF);
-  document.getElementById('an-spent').textContent=fmt(tE);
-  document.getElementById('an-rem').textContent=fmt(tF-tE);
-  document.getElementById('an-burn').textContent=burn+'%';
-  // Category bars
-  const ct={};S.categories.forEach(c=>ct[c.id]=0);S.expenses.forEach(e=>{if(ct[e.category]!==undefined)ct[e.category]+=e.amount;});
-  const mx=Math.max(...Object.values(ct),1);
-  const acat=document.getElementById('an-cat');
-  const cd=S.categories.filter(c=>ct[c.id]>0).sort((a,b)=>ct[b.id]-ct[a.id]);
-  acat.innerHTML=cd.length?cd.map(c=>{const p=Math.round(ct[c.id]/mx*100);return`<div class="br-row"><div class="bl">${c.name}</div><div class="bt"><div class="bf" style="width:${p}%;background:linear-gradient(90deg,${c.color},${c.color}cc)">${p>12?p+'%':''}</div></div><div class="bamt">${fmt(ct[c.id])}</div></div>`;}).join(''):'<div class="empty"><p>No data yet</p></div>';
-  // Donut
-  const st={};S.sources.forEach(s=>st[s.id]=0);S.expenses.forEach(e=>{if(e.source&&st[e.source]!==undefined)st[e.source]+=e.amount;});
-  const cols=['#c17f3a','#3a6bc1','#3a9c6b','#9c3a9c','#c13a3a','#6b8a3a','#c19c3a'];
-  const swd=S.sources.filter(s=>st[s.id]>0);
-  const asrc=document.getElementById('an-src');
-  if(!swd.length){asrc.innerHTML='<div class="empty"><p>No data yet</p></div>';}
-  else{
-    const tot=swd.reduce((s,x)=>s+st[x.id],0);let ang=0;
-    const paths=swd.map((src,i)=>{const p=st[src.id]/tot;const a1=ang,a2=ang+p*2*Math.PI;const x1=70+50*Math.sin(a1),y1=70-50*Math.cos(a1),x2=70+50*Math.sin(a2),y2=70-50*Math.cos(a2);ang=a2;return`<path d="M70,70 L${x1.toFixed(2)},${y1.toFixed(2)} A50,50 0 ${p>.5?1:0},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${cols[i%cols.length]}" opacity=".85"/>`;}).join('');
-    const leg=swd.map((src,i)=>`<div class="li"><div class="ldot" style="background:${cols[i%cols.length]}"></div><span class="lname">${src.name}</span><span class="lpct">${Math.round(st[src.id]/tot*100)}%</span><span class="lamt">${fmt(st[src.id])}</span></div>`).join('');
-    asrc.innerHTML=`<div class="dc"><svg width="140" height="140" viewBox="0 0 140 140">${paths}<circle cx="70" cy="70" r="28" fill="var(--surface)"/><text x="70" y="66" text-anchor="middle" fill="var(--ink)" font-size="10" font-family="IBM Plex Mono">${fmt(tot)}</text><text x="70" y="78" text-anchor="middle" fill="var(--muted)" font-size="8" font-family="IBM Plex Mono">spent</text></svg><div class="dleg">${leg}</div></div>`;
-  }
-  // Monthly
-  const mo={};S.expenses.forEach(e=>{const m=e.date.slice(0,7);mo[m]=(mo[m]||0)+e.amount;});
-  const mos=Object.keys(mo).sort();const mxM=Math.max(...mos.map(m=>mo[m]),1);
-  document.getElementById('an-month').innerHTML=mos.length?mos.map(m=>{const p=Math.round(mo[m]/mxM*100);const l=new Date(m+'-01').toLocaleString('en-IN',{month:'short',year:'2-digit'});return`<div class="br-row"><div class="bl">${l}</div><div class="bt"><div class="bf" style="width:${p}%">${p>12?p+'%':''}</div></div><div class="bamt">${fmt(mo[m])}</div></div>`;}).join(''):'<div class="empty"><p>No data yet</p></div>';
-  // Util
-  document.getElementById('an-util').innerHTML=S.sources.length?S.sources.map(src=>{const sp=srcSpent(src.id);const pr=src.total?Math.min(100,Math.round(src.recv/src.total*100)):0;const ps=src.recv?Math.min(100,Math.round(sp/src.recv*100)):0;return`<div style="margin-bottom:20px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:600">${src.name}</span><span class="mono" style="font-size:12px;color:var(--muted)">Sanctioned: ${fmt(src.total)}</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:4px">Received: ${fmt(src.recv)} (${pr}%)</div><div class="pw"><div class="pb used" style="width:${pr}%"></div></div><div style="font-size:12px;color:var(--muted);margin:6px 0 4px">Spent: ${fmt(sp)} (${ps}%)</div><div class="pw"><div class="pb spent" style="width:${ps}%"></div></div><div style="display:flex;gap:20px;margin-top:6px;font-size:12px"><span>In hand: <strong style="color:var(--success)">${fmt(src.recv-sp)}</strong></span><span>Yet to receive: <strong style="color:var(--accent)">${fmt(src.total-src.recv)}</strong></span></div></div>`;}).join(''):'<div class="empty"><p>No sources yet</p></div>';
-}
-
-// ━━━ DELETE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function doDel(){
-  if(!pDel)return;
-  if(pDel.type==='expense')S.expenses=S.expenses.filter(e=>e.id!==pDel.id);
-  else if(pDel.type==='source'){S.sources=S.sources.filter(s=>s.id!==pDel.id);refreshDrops();}
-  else if(pDel.type==='category')S.categories=S.categories.filter(c=>c.id!==pDel.id);
-  save();cm('mo-del');pDel=null;
-  const a=document.querySelector('.sec.active');if(a)go(a.id.replace('sec-',''));
-  toast('Deleted');
-}
-
-// ━━━ GOOGLE DRIVE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const DRV_FILE='BuildLedger_data.json';
-const DRV_SCOPE='https://www.googleapis.com/auth/drive.file';
-
-function openDriveModal(){
-  document.getElementById('drv-dis').style.display=drv.connected?'none':'';
-  document.getElementById('drv-con').style.display=drv.connected?'':'none';
-  if(!drv.connected){if(drv.clientId)document.getElementById('drv-cid').value=drv.clientId;if(drv.apiKey)document.getElementById('drv-key').value=drv.apiKey;}
-  om('mo-drive');
-}
-
-function connectDrive(){
-  const cid=document.getElementById('drv-cid').value.trim();
-  const key=document.getElementById('drv-key').value.trim();
-  if(!cid||!key){toast('Enter both credentials','e');return}
-  drv.clientId=cid;drv.apiKey=key;
-  localStorage.setItem('bld',JSON.stringify(drv));
-  loadGapi();
-}
-
-function loadGapi(){
-  toast('Loading Google APIs…','i');
-  if(typeof gapi!=='undefined'){initGapi();return}
-  const sc=document.createElement('script');sc.src='https://apis.google.com/js/api.js';sc.onload=initGapi;sc.onerror=()=>toast('Failed to load Google API — check internet','e');document.head.appendChild(sc);
-}
-
-function initGapi(){
-  gapi.load('client',async()=>{
-    try{
-      await gapi.client.init({apiKey:drv.apiKey,discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']});
-      gapiOk=true;reqToken();
-    }catch(e){toast('Google API init failed: '+(e.details||e.message||'Unknown'),'e');}
-  });
-}
-
-function reqToken(){
-  if(typeof google==='undefined'||!google.accounts){
-    const sc=document.createElement('script');sc.src='https://accounts.google.com/gsi/client';sc.onload=doToken;document.head.appendChild(sc);
-  }else doToken();
-}
-
-function doToken(){
-  const tc=google.accounts.oauth2.initTokenClient({
-    client_id:drv.clientId,scope:DRV_SCOPE,
-    callback:async(resp)=>{
-      if(resp.error){toast('Auth failed: '+resp.error,'e');return}
-      drvToken=resp.access_token;gapi.client.setToken({access_token:drvToken});
-      drv.connected=true;localStorage.setItem('bld',JSON.stringify(drv));
-      updDrvUI(true);cm('mo-drive');
-      toast('✓ Connected to Google Drive!');
-      await findDrvFile();await saveDrive();
+function loadFromCloud(){
+  if(!db)return;
+  db.collection("ledger").doc("shared").onSnapshot(doc=>{
+    if(doc.exists){
+      S = doc.data();
+      renderDash();
+      renderSrc();
+      renderExp();
     }
   });
-  tc.requestAccessToken({prompt:'consent'});
 }
 
-async function findDrvFile(){
-  try{
-    const r=await gapi.client.drive.files.list({q:`name='${DRV_FILE}' and trashed=false`,fields:'files(id,name)',spaces:'drive'});
-    const files=r.result.files;
-    if(files&&files.length){drv.fileId=files[0].id;localStorage.setItem('bld',JSON.stringify(drv));if(confirm('Found existing BuildLedger data on Drive. Load it?'))await loadDrive();}
-  }catch(e){console.error(e);}
+// MODIFY EXISTING SAVE()
+const originalSave = save;
+save = function(){
+  originalSave();
+  saveToCloud();
 }
 
-async function saveDrive(){
-  if(!drvToken){toast('Not connected to Drive','e');return}
-  setDot('sync');
-  const content=JSON.stringify(S,null,2);
-  try{
-    if(drv.fileId){
-      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${drv.fileId}?uploadType=media`,{method:'PATCH',headers:{Authorization:'Bearer '+drvToken,'Content-Type':'application/json'},body:content});
-    }else{
-      const meta=new Blob([JSON.stringify({name:DRV_FILE,mimeType:'application/json'})],{type:'application/json'});
-      const form=new FormData();form.append('metadata',meta);form.append('file',new Blob([content],{type:'application/json'}));
-      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{Authorization:'Bearer '+drvToken},body:form});
-      const j=await r.json();drv.fileId=j.id;localStorage.setItem('bld',JSON.stringify(drv));
-    }
-    document.getElementById('last-sync').textContent=new Date().toLocaleTimeString('en-IN');
-    document.getElementById('last-sync-sb').textContent=new Date().toLocaleTimeString('en-IN');
-    if(drv.fileId){const el=document.getElementById('drv-file-id-display');if(el)el.textContent=drv.fileId;}
-    setDot('on');toast('✓ Saved to Google Drive');
-  }catch(e){setDot('on');toast('Drive save failed: '+e.message,'e');console.error(e);}
-}
-
-async function loadDrive(){
-  if(!drvToken||!drv.fileId){toast('Not connected or no file','e');return}
-  setDot('sync');
-  try{
-    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${drv.fileId}?alt=media`,{headers:{Authorization:'Bearer '+drvToken}});
-    S=await r.json();save();setDot('on');
-    renderDash();refreshDrops();renderCats();
-    toast('✓ Loaded from Drive');cm('mo-drive');
-  }catch(e){setDot('on');toast('Load failed: '+e.message,'e');}
-}
-
-function disDrive(){
-  if(!confirm('Disconnect from Drive? Local data stays safe.'))return;
-  drv={clientId:'',apiKey:'',fileId:'',connected:false};drvToken=null;
-  localStorage.setItem('bld',JSON.stringify(drv));
-  updDrvUI(false);cm('mo-drive');toast('Disconnected from Drive');
-}
-
-function copyFileId(){
-  if(drv.fileId){navigator.clipboard.writeText(drv.fileId).then(()=>toast('File ID copied! Share this with others.'));}
-  else toast('No file ID yet — save first','e');
-}
-
-function loadSharedFile(){
-  const sid=document.getElementById('drv-shared-id').value.trim();
-  if(!sid){toast('Enter a shared File ID first','e');return}
-  if(!drvToken){toast('Connect to Drive first','e');return}
-  drv.fileId=sid;
-  loadDrive();
-}
-
-function manualSync(){
-  if(drvToken&&drv.fileId)loadDrive();
-  else if(drv.connected)loadGapi();
-  else{toast('Connect to Drive first — click the Drive pill','i');openDriveModal();}
-}
-
-function updDrvUI(on){
-  setDot(on?'on':'off');
-  document.getElementById('dlabel').textContent=on?'Drive: connected':'Drive: not connected';
-  document.getElementById('drv-dis').style.display=on?'none':'';
-  document.getElementById('drv-con').style.display=on?'':'none';
-  document.getElementById('sync-btn').style.display=on?'':'none';
-  if(on&&drv.fileId){
-    const el=document.getElementById('drv-file-id-display');
-    if(el)el.textContent=drv.fileId;
-  }
-  // Show load-shared btn only when credentials are entered
-  const shareBtn=document.getElementById('btn-load-shared');
-  if(shareBtn)shareBtn.style.display=drv.clientId?'':'none';
-}
-
-// Watch shared ID field to show/hide load button
-document.addEventListener('DOMContentLoaded',()=>{
-  const inp=document.getElementById('drv-shared-id');
-  if(inp)inp.addEventListener('input',()=>{
-    const btn=document.getElementById('btn-load-shared');
-    if(btn)btn.style.display=inp.value.trim()?'':'none';
-  });
+// INIT ON LOAD
+window.addEventListener('load', ()=>{
+  initFirebase();
+  loadFromCloud();
 });
 
-function setDot(s){
-  const d=document.getElementById('ddot');d.className='ddot'+(s==='on'?' on':s==='sync'?' sync':'');
-  document.getElementById('dlabel').textContent=s==='sync'?'Syncing…':(drv.connected?'Drive: connected':'Drive: not connected');
+// 3. SIDEBAR TOGGLE
+function toggleSidebar(){
+  const sb = document.querySelector('.sidebar');
+  sb.classList.toggle('collapsed');
+  localStorage.setItem('sidebar', sb.classList.contains('collapsed'));
 }
 
-let syncDeb=null;
-function schedSync(){clearTimeout(syncDeb);syncDeb=setTimeout(()=>{if(drv.connected&&drvToken)saveDrive();},3000);}
-
-// ━━━ INIT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function init(){
-  load();
-  const today=new Date().toISOString().split('T')[0];
-  document.getElementById('src-date').value=today;
-  document.getElementById('exp-date').value=today;
-  document.getElementById('us-date').value=today;
-  renderDash();refreshDrops();renderCats();
-  if(drv.connected){updDrvUI(true);if(drv.clientId&&drv.apiKey)loadGapi();}
-  document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')}));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.mo').forEach(m=>m.classList.remove('open'))});
-}
-init();
+// RESTORE STATE
+window.addEventListener('load', ()=>{
+  if(localStorage.getItem('sidebar') === 'true'){
+    document.querySelector('.sidebar').classList.add('collapsed');
+  }
+});
 </script>
-</body>
-</html>
+
+<!-- ADD FIREBASE SCRIPTS BEFORE CLOSING BODY -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+
+<!-- ADD TO SIDEBAR TOP -->
+<button onclick="toggleSidebar()" style="margin:10px">☰</button>
+
+<!-- ADD CSS -->
+<style>
+.sidebar.collapsed { width:60px; }
+.sidebar.collapsed .sb-brand,
+.sidebar.collapsed .nl,
+.sidebar.collapsed .nb span,
+.sidebar.collapsed .dl { display:none; }
+</style>
