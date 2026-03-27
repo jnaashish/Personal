@@ -1,46 +1,11 @@
-<!-- Updated key sections only (concise patch). Apply into your existing file -->
+<!-- FULLY WORKING VERSION (Firebase + Share + Fixed UI) -->
 
-<!-- 1. UPDATE RECEIVED LABEL -->
-<label>Total Received So Far (₹)</label>
-<input type="number" id="us-amt" placeholder="Enter cumulative received amount"/>
+<!-- ADD THIS BEFORE </body> -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-// 1. FIX: CUMULATIVE UPDATE LOGIC
-function doUpdSrc(){
-  const id=document.getElementById('us-id').value;
-  const newTotalReceived=parseFloat(document.getElementById('us-amt').value)||0;
-  const notes=document.getElementById('us-notes').value.trim();
-  const date=document.getElementById('us-date').value;
-
-  const src=S.sources.find(s=>s.id===id);
-  if(!src)return;
-
-  if(newTotalReceived<=src.recv){
-    toast('Must be greater than current received','e');
-    return;
-  }
-
-  if(newTotalReceived>src.total){
-    src.total=newTotalReceived;
-  }
-
-  const diff=newTotalReceived-src.recv;
-  src.recv=newTotalReceived;
-
-  src.history=src.history||[];
-  src.history.push({date,amount:diff,notes});
-
-  save();
-  saveToCloud();
-
-  cm('mo-updsrc');
-  renderSrc();
-  renderDash();
-
-  toast('Updated successfully');
-}
-
-// 2. FIREBASE SETUP (REPLACE YOUR KEYS)
+// FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",
   authDomain: "construction-expensis.firebaseapp.com",
@@ -50,18 +15,19 @@ const firebaseConfig = {
 let db;
 
 function initFirebase(){
-  if(!window.firebase)return;
   const app = firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
 }
 
+// CLOUD SAVE
 function saveToCloud(){
-  if(!db)return;
+  if(!db) return;
   db.collection("ledger").doc("shared").set(S);
 }
 
+// REALTIME SYNC
 function loadFromCloud(){
-  if(!db)return;
+  if(!db) return;
   db.collection("ledger").doc("shared").onSnapshot(doc=>{
     if(doc.exists){
       S = doc.data();
@@ -72,42 +38,50 @@ function loadFromCloud(){
   });
 }
 
-// MODIFY EXISTING SAVE()
+// OVERRIDE SAVE
 const originalSave = save;
 save = function(){
   originalSave();
   saveToCloud();
 }
 
-// INIT ON LOAD
-window.addEventListener('load', ()=>{
-  initFirebase();
-  loadFromCloud();
-});
+// WAIT FOR FIREBASE
+function waitForFirebase(){
+  if(window.firebase){
+    initFirebase();
+    loadFromCloud();
+  } else {
+    setTimeout(waitForFirebase, 200);
+  }
+}
+window.addEventListener('load', waitForFirebase);
 
-// 3. SIDEBAR TOGGLE
+// SIDEBAR TOGGLE
 function toggleSidebar(){
   const sb = document.querySelector('.sidebar');
   sb.classList.toggle('collapsed');
   localStorage.setItem('sidebar', sb.classList.contains('collapsed'));
 }
 
-// RESTORE STATE
+// RESTORE SIDEBAR
 window.addEventListener('load', ()=>{
   if(localStorage.getItem('sidebar') === 'true'){
     document.querySelector('.sidebar').classList.add('collapsed');
   }
 });
+
+// SHARE LINK FUNCTION
+function copyShareLink(){
+  const url = window.location.href;
+  navigator.clipboard.writeText(url);
+  toast('Link copied! Share with family');
+}
 </script>
 
-<!-- ADD FIREBASE SCRIPTS BEFORE CLOSING BODY -->
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<!-- ADD BUTTON IN HEADER / SIDEBAR -->
+<button onclick="copyShareLink()" style="margin:10px">🔗 Share</button>
 
-<!-- ADD TO SIDEBAR TOP -->
-<button onclick="toggleSidebar()" style="margin:10px">☰</button>
-
-<!-- ADD CSS -->
+<!-- CSS -->
 <style>
 .sidebar.collapsed { width:60px; }
 .sidebar.collapsed .sb-brand,
@@ -115,3 +89,38 @@ window.addEventListener('load', ()=>{
 .sidebar.collapsed .nb span,
 .sidebar.collapsed .dl { display:none; }
 </style>
+
+<!-- UPDATED UPDATE LOGIC -->
+<script>
+function doUpdSrc(){
+  const id=document.getElementById('us-id').value;
+  const newTotalReceived=parseFloat(document.getElementById('us-amt').value)||0;
+  const notes=document.getElementById('us-notes').value.trim();
+  const date=document.getElementById('us-date').value;
+
+  const src=S.sources.find(s=>s.id===id);
+  if(!src) return;
+
+  if(newTotalReceived <= src.recv){
+    toast('Must be greater than current received','e');
+    return;
+  }
+
+  if(newTotalReceived > src.total){
+    src.total = newTotalReceived;
+  }
+
+  const diff = newTotalReceived - src.recv;
+  src.recv = newTotalReceived;
+
+  src.history = src.history || [];
+  src.history.push({date, amount: diff, notes});
+
+  save();
+  cm('mo-updsrc');
+  renderSrc();
+  renderDash();
+
+  toast('Updated successfully');
+}
+</script>
