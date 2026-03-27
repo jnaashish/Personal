@@ -1,168 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuildLedger Pro</title>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BuildLedger App UI</title>
 <style>
-body{margin:0;font-family:Arial;background:#f5f5f5}
-.sidebar{width:220px;background:#1f1f1f;color:#fff;height:100vh;position:fixed;padding:15px}
-.sidebar.collapsed{width:60px}
-.main{margin-left:220px;padding:20px}
-.sidebar.collapsed + .main{margin-left:60px}
-button{padding:8px 12px;margin:5px;cursor:pointer}
-.card{background:#fff;padding:15px;border-radius:10px;margin-bottom:15px}
-input{padding:6px;margin:4px;width:100%}
-.table{width:100%;border-collapse:collapse}
-.table th,.table td{padding:8px;border-bottom:1px solid #ddd;text-align:left}
+:root{--bg:#f5f6f8;--card:#fff;--ink:#111827;--muted:#6b7280;--accent:#c17f3a}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial;background:var(--bg);color:var(--ink)}
+
+/* TOP BAR */
+.topbar{position:fixed;top:0;left:0;right:0;height:56px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:10}
+.topbar h1{font-size:16px;margin:0}
+
+/* MAIN */
+.main{padding:70px 12px 80px}
+.card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+input,select,button{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #ddd}
+button{background:var(--accent);color:#fff;border:none}
+.small{font-size:12px;color:var(--muted)}
+.kpi{font-size:18px;font-weight:bold}
+.bar{height:8px;background:#e5e7eb;border-radius:6px;margin-top:6px}
+.fill{height:100%;background:linear-gradient(90deg,var(--accent),#e09a5a)}
+
+/* BOTTOM NAV */
+.nav{position:fixed;bottom:0;left:0;right:0;height:60px;background:#fff;border-top:1px solid #ddd;display:flex;justify-content:space-around;align-items:center}
+.nav button{background:none;color:#111;border:none;font-size:12px}
+
+/* FLOAT BUTTON */
+.fab{position:fixed;bottom:80px;right:16px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center}
+
+.hidden{display:none}
 </style>
 </head>
 <body>
 
-<div class="sidebar">
-  <button onclick="toggleSidebar()">☰</button>
-  <button onclick="copyShareLink()">🔗 Share</button>
+<div class="topbar">
+  <h1>BuildLedger</h1>
+  <button onclick="copyShareLink()">🔗</button>
 </div>
 
 <div class="main">
-  <h2>BuildLedger Dashboard</h2>
 
+<!-- DASHBOARD -->
+<div id="view-dashboard">
   <div class="card">
-    <h3>Add Source</h3>
-    <input id="name" placeholder="Name">
-    <input id="total" placeholder="Total">
-    <input id="recv" placeholder="Received">
-    <button onclick="addSource()">Add Source</button>
+    <div class="small">Balance</div>
+    <div id="bal" class="kpi">0</div>
   </div>
 
   <div class="card">
-    <h3>Add Expense</h3>
-    <input id="desc" placeholder="Description">
-    <input id="amt" placeholder="Amount">
-    <select id="srcSelect"></select>
-    <button onclick="addExpense()">Add Expense</button>
-  </div>
-
-  <div class="card">
-    <h3>Sources</h3>
     <div id="sources"></div>
   </div>
+</div>
 
+<!-- SOURCES -->
+<div id="view-sources" class="hidden">
   <div class="card">
-    <h3>Expenses</h3>
-    <table class="table">
-      <thead><tr><th>Description</th><th>Amount</th><th>Source</th></tr></thead>
-      <tbody id="expenses"></tbody>
-    </table>
+    <input id="name" placeholder="Source name">
+    <input id="total" placeholder="Total">
+    <button onclick="addSource()">Add Source</button>
   </div>
+</div>
+
+<!-- EXPENSES -->
+<div id="view-expenses" class="hidden">
+  <div class="card">
+    <select id="srcSel"></select>
+    <input id="amt" placeholder="Expense">
+    <button onclick="addExpense()">Add Expense</button>
+  </div>
+</div>
+
+</div>
+
+<div class="fab" onclick="quickAdd()">+</div>
+
+<div class="nav">
+  <button onclick="switchView('dashboard')">Home</button>
+  <button onclick="switchView('sources')">Sources</button>
+  <button onclick="switchView('expenses')">Expenses</button>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",
-  authDomain: "construction-expensis.firebaseapp.com",
-  projectId: "construction-expensis",
-};
-
+const firebaseConfig={apiKey:"AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",authDomain:"construction-expensis.firebaseapp.com",projectId:"construction-expensis"};
 let db;
-let S = {sources:[],expenses:[]};
+let S={sources:[],expenses:[]};
 
-function initFirebase(){
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
-}
+function initFirebase(){firebase.initializeApp(firebaseConfig);db=firebase.firestore();}
+function save(){localStorage.setItem('data',JSON.stringify(S));if(db)db.collection('ledger').doc('shared').set(S);} 
+function load(){const d=localStorage.getItem('data');if(d)S=JSON.parse(d);} 
+function loadCloud(){if(!db)return;db.collection('ledger').doc('shared').onSnapshot(doc=>{if(doc.exists){S=doc.data();render();}});} 
 
-function saveToCloud(){
-  if(!db) return;
-  db.collection("ledger").doc("shared").set(S);
-}
-
-function loadFromCloud(){
-  if(!db) return;
-  db.collection("ledger").doc("shared").onSnapshot(doc=>{
-    if(doc.exists){
-      S = doc.data();
-      render();
-    }
-  });
-}
-
-function saveWrapper(){
-  localStorage.setItem('data',JSON.stringify(S));
-  saveToCloud();
-}
-
-function loadLocal(){
-  const d=localStorage.getItem('data');
-  if(d) S=JSON.parse(d);
-}
-
-function addSource(){
-  const name=document.getElementById('name').value;
-  const total=parseFloat(document.getElementById('total').value)||0;
-  const recv=parseFloat(document.getElementById('recv').value)||0;
-
-  S.sources.push({id:Date.now(),name,total,recv});
-  saveWrapper();
-  render();
-}
-
-function addExpense(){
-  const desc=document.getElementById('desc').value;
-  const amt=parseFloat(document.getElementById('amt').value)||0;
-  const src=document.getElementById('srcSelect').value;
-
-  S.expenses.push({desc,amt,src});
-  saveWrapper();
-  render();
-}
+function addSource(){const n=document.getElementById('name').value;const t=parseFloat(document.getElementById('total').value)||0;if(!n||t<=0)return;S.sources.push({id:Date.now(),name:n,total:t,received:t,spent:0});save();render();}
+function addExpense(){const id=document.getElementById('srcSel').value;const amt=parseFloat(document.getElementById('amt').value)||0;const s=S.sources.find(x=>x.id==id);if(!s||amt<=0)return;if(amt>(s.received-s.spent)){alert('Too much');return;}s.spent+=amt;S.expenses.push({id:Date.now(),src:id,amt});save();render();}
 
 function render(){
-  const sEl=document.getElementById('sources');
-  sEl.innerHTML = S.sources.map(s=>
-    `<div>${s.name} | ₹${s.recv}/${s.total}</div>`
-  ).join('');
+  document.getElementById('srcSel').innerHTML=S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const bal=S.sources.reduce((a,b)=>a+(b.received-b.spent),0);
+  document.getElementById('bal').innerText='₹'+bal;
 
-  const expEl=document.getElementById('expenses');
-  expEl.innerHTML = S.expenses.map(e=>
-    `<tr><td>${e.desc}</td><td>₹${e.amt}</td><td>${getSourceName(e.src)}</td></tr>`
-  ).join('');
-
-  const sel=document.getElementById('srcSelect');
-  sel.innerHTML = S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('sources').innerHTML=S.sources.map(s=>{
+    const pct=(s.spent/s.total)*100;
+    return `<div>${s.name} (${pct.toFixed(0)}%)<div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`;
+  }).join('');
 }
 
-function getSourceName(id){
-  const s=S.sources.find(x=>x.id==id);
-  return s? s.name : '-';
+function switchView(v){
+  ['dashboard','sources','expenses'].forEach(x=>{
+    document.getElementById('view-'+x).classList.add('hidden');
+  });
+  document.getElementById('view-'+v).classList.remove('hidden');
 }
 
-function toggleSidebar(){
-  document.querySelector('.sidebar').classList.toggle('collapsed');
-}
+function quickAdd(){switchView('expenses');}
 
-function copyShareLink(){
-  navigator.clipboard.writeText(window.location.href);
-  alert('Link copied');
-}
+function copyShareLink(){navigator.clipboard.writeText(window.location.href);alert('Copied');}
 
-function startApp(){
-  loadLocal();
-  render();
-
-  setTimeout(()=>{
-    if(window.firebase){
-      initFirebase();
-      loadFromCloud();
-    }
-  },500);
-}
-
-window.onload = startApp;
+function start(){load();render();setTimeout(()=>{initFirebase();loadCloud();},500);}window.onload=start;
 </script>
 
 </body>
