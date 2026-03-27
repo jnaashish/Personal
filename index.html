@@ -1,11 +1,45 @@
-<!-- FULLY WORKING VERSION (Firebase + Share + Fixed UI) -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuildLedger</title>
 
-<!-- ADD THIS BEFORE </body> -->
+<style>
+body{font-family:Arial;margin:0}
+.sidebar{width:200px;background:#222;color:#fff;height:100vh;position:fixed;padding:10px}
+.sidebar.collapsed{width:60px}
+.main{margin-left:200px;padding:20px}
+.sidebar.collapsed + .main{margin-left:60px}
+button{padding:6px 10px;margin:5px}
+</style>
+</head>
+
+<body>
+
+<div class="sidebar">
+  <button onclick="toggleSidebar()">☰</button>
+  <button onclick="copyShareLink()">🔗 Share</button>
+</div>
+
+<div class="main">
+  <h2>BuildLedger</h2>
+
+  <h3>Add Source</h3>
+  <input id="name" placeholder="Name"><br>
+  <input id="total" placeholder="Total"><br>
+  <input id="recv" placeholder="Received"><br>
+  <button onclick="addSource()">Add</button>
+
+  <h3>Sources</h3>
+  <div id="list"></div>
+</div>
+
+<!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-// FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",
   authDomain: "construction-expensis.firebaseapp.com",
@@ -13,114 +47,78 @@ const firebaseConfig = {
 };
 
 let db;
+let S = {sources:[]};
 
 function initFirebase(){
-  const app = firebase.initializeApp(firebaseConfig);
+  firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
 }
 
-// CLOUD SAVE
 function saveToCloud(){
   if(!db) return;
   db.collection("ledger").doc("shared").set(S);
 }
 
-// REALTIME SYNC
 function loadFromCloud(){
   if(!db) return;
   db.collection("ledger").doc("shared").onSnapshot(doc=>{
     if(doc.exists){
       S = doc.data();
-      renderDash();
-      renderSrc();
-      renderExp();
+      render();
     }
   });
 }
 
-// OVERRIDE SAVE
-const originalSave = save;
-save = function(){
-  originalSave();
+function saveWrapper(){
+  localStorage.setItem('data',JSON.stringify(S));
   saveToCloud();
 }
 
-// WAIT FOR FIREBASE
-function waitForFirebase(){
-  if(window.firebase){
-    initFirebase();
-    loadFromCloud();
-  } else {
-    setTimeout(waitForFirebase, 200);
-  }
+function loadLocal(){
+  const d=localStorage.getItem('data');
+  if(d) S=JSON.parse(d);
 }
-window.addEventListener('load', waitForFirebase);
 
-// SIDEBAR TOGGLE
+function addSource(){
+  const name=document.getElementById('name').value;
+  const total=parseFloat(document.getElementById('total').value)||0;
+  const recv=parseFloat(document.getElementById('recv').value)||0;
+
+  S.sources.push({name,total,recv});
+  saveWrapper();
+  render();
+}
+
+function render(){
+  const el=document.getElementById('list');
+  el.innerHTML = S.sources.map(s=>
+    `<div>${s.name} | Total: ${s.total} | Received: ${s.recv}</div>`
+  ).join('');
+}
+
 function toggleSidebar(){
-  const sb = document.querySelector('.sidebar');
-  sb.classList.toggle('collapsed');
-  localStorage.setItem('sidebar', sb.classList.contains('collapsed'));
+  document.querySelector('.sidebar').classList.toggle('collapsed');
 }
 
-// RESTORE SIDEBAR
-window.addEventListener('load', ()=>{
-  if(localStorage.getItem('sidebar') === 'true'){
-    document.querySelector('.sidebar').classList.add('collapsed');
-  }
-});
-
-// SHARE LINK FUNCTION
 function copyShareLink(){
-  const url = window.location.href;
-  navigator.clipboard.writeText(url);
-  toast('Link copied! Share with family');
+  navigator.clipboard.writeText(window.location.href);
+  alert('Link copied');
 }
+
+function startApp(){
+  loadLocal();
+  render();
+
+  setTimeout(()=>{
+    if(window.firebase){
+      initFirebase();
+      loadFromCloud();
+    }
+  },500);
+}
+
+window.onload = startApp;
 </script>
 
-<!-- ADD BUTTON IN HEADER / SIDEBAR -->
-<button onclick="copyShareLink()" style="margin:10px">🔗 Share</button>
-
-<!-- CSS -->
-<style>
-.sidebar.collapsed { width:60px; }
-.sidebar.collapsed .sb-brand,
-.sidebar.collapsed .nl,
-.sidebar.collapsed .nb span,
-.sidebar.collapsed .dl { display:none; }
-</style>
-
-<!-- UPDATED UPDATE LOGIC -->
-<script>
-function doUpdSrc(){
-  const id=document.getElementById('us-id').value;
-  const newTotalReceived=parseFloat(document.getElementById('us-amt').value)||0;
-  const notes=document.getElementById('us-notes').value.trim();
-  const date=document.getElementById('us-date').value;
-
-  const src=S.sources.find(s=>s.id===id);
-  if(!src) return;
-
-  if(newTotalReceived <= src.recv){
-    toast('Must be greater than current received','e');
-    return;
-  }
-
-  if(newTotalReceived > src.total){
-    src.total = newTotalReceived;
-  }
-
-  const diff = newTotalReceived - src.recv;
-  src.recv = newTotalReceived;
-
-  src.history = src.history || [];
-  src.history.push({date, amount: diff, notes});
-
-  save();
-  cm('mo-updsrc');
-  renderSrc();
-  renderDash();
-
-  toast('Updated successfully');
-}
-</script>
+</body>
+</html>
