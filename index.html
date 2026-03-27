@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BuildLedger Final</title>
+<title>BuildLedger</title>
 
 <style>
 body{margin:0;font-family:Arial;background:#f5f6f8}
@@ -18,6 +18,7 @@ button{padding:8px 12px;margin:5px;cursor:pointer}
 .fill{height:100%;background:#c17f3a}
 </style>
 </head>
+
 <body>
 
 <div class="sidebar">
@@ -31,8 +32,9 @@ button{padding:8px 12px;margin:5px;cursor:pointer}
 <h2>BuildLedger</h2>
 
 <div class="card">
-<input id="name" placeholder="Source name">
-<input id="total" placeholder="Total">
+<input id="src-name" placeholder="Source name">
+<input id="src-total" placeholder="Total">
+<input id="src-recv" placeholder="Received">
 <button onclick="addSource()">Add Source</button>
 </div>
 
@@ -58,117 +60,170 @@ button{padding:8px 12px;margin:5px;cursor:pointer}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-const firebaseConfig={apiKey:"AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",authDomain:"construction-expensis.firebaseapp.com",projectId:"construction-expensis"};
+const firebaseConfig={
+  apiKey:"AIzaSyCjZnPTgg0KH1kJfnJT_dxMQ1NgRNVH0EY",
+  authDomain:"construction-expensis.firebaseapp.com",
+  projectId:"construction-expensis"
+};
 
 let db;
 let S={sources:[],expenses:[]};
 
-function initFirebase(){firebase.initializeApp(firebaseConfig);db=firebase.firestore();}
+function initFirebase(){
+  firebase.initializeApp(firebaseConfig);
+  db=firebase.firestore();
+}
 
 function save(){
-localStorage.setItem('data',JSON.stringify(S));
-if(db)db.collection('ledger').doc('shared').set(S);
+  localStorage.setItem('data',JSON.stringify(S));
+  if(db) db.collection('ledger').doc('shared').set(S);
 }
 
 function load(){
-const d=localStorage.getItem('data');
-if(d)S=JSON.parse(d);
+  const d=localStorage.getItem('data');
+  if(d) S=JSON.parse(d);
 }
 
 function loadCloud(){
-if(!db)return;
-db.collection('ledger').doc('shared').onSnapshot(doc=>{
-if(doc.exists){
-S=doc.data();
-normalizeData();
-render();
-}
-});
+  if(!db) return;
+  db.collection('ledger').doc('shared').onSnapshot(doc=>{
+    if(doc.exists){
+      S=doc.data();
+      normalizeData();
+      render();
+    }
+  });
 }
 
 function normalizeData(){
-S.sources.forEach(s=>{
-if(s.received===undefined)s.received=s.recv||0;
-if(s.spent===undefined)s.spent=0;
-});
+  S.sources.forEach(s=>{
+    if(s.recv===undefined) s.recv=0;
+    if(!s.history) s.history=[];
+  });
 }
 
-function addSource(){
-const name=document.getElementById('name').value;
-const total=parseFloat(document.getElementById('total').value)||0;
-if(!name||total<=0)return;
+function uid(){return Date.now()}
 
-S.sources.push({id:Date.now(),name,total,received:0,spent:0});
-save();render();
+function addSource(){
+  const name=document.getElementById('src-name').value;
+  const total=parseFloat(document.getElementById('src-total').value)||0;
+  const recv=parseFloat(document.getElementById('src-recv').value)||0;
+
+  if(!name||total<=0) return;
+
+  S.sources.push({
+    id:uid(),
+    name,
+    total,
+    recv,
+    history: recv>0 ? [{
+      date:new Date().toISOString().split('T')[0],
+      amount:recv,
+      notes:'Initial'
+    }] : []
+  });
+
+  save();
+  render();
 }
 
 function addExpense(){
-const id=document.getElementById('srcSel').value;
-const amt=parseFloat(document.getElementById('amt').value)||0;
-const src=S.sources.find(s=>s.id==id);
-if(!src||amt<=0)return;
+  const id=document.getElementById('srcSel').value;
+  const amt=parseFloat(document.getElementById('amt').value)||0;
+  const src=S.sources.find(s=>s.id==id);
 
-const available=src.received-src.spent;
-if(amt>available){alert('Exceeds balance');return;}
+  if(!src||amt<=0) return;
 
-src.spent+=amt;
-S.expenses.push({id:Date.now(),src:id,amt});
-save();render();
+  const spent = S.expenses
+    .filter(e=>e.src==id)
+    .reduce((a,b)=>a+b.amt,0);
+
+  if(amt > (src.recv - spent)){
+    alert('Not enough balance');
+    return;
+  }
+
+  S.expenses.push({
+    id:uid(),
+    src:id,
+    amt
+  });
+
+  save();
+  render();
 }
 
 function deleteExpense(id){
-const exp=S.expenses.find(e=>e.id==id);
-const src=S.sources.find(s=>s.id==exp.src);
-src.spent-=exp.amt;
-S.expenses=S.expenses.filter(e=>e.id!=id);
-save();render();
+  S.expenses = S.expenses.filter(e=>e.id!=id);
+  save();
+  render();
 }
 
 function render(){
 
-const sel=document.getElementById('srcSel');
-sel.innerHTML=S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  // dropdown
+  document.getElementById('srcSel').innerHTML =
+    S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 
-const sEl=document.getElementById('sources');
-sEl.innerHTML=S.sources.map(s=>{
-const pct=s.total?((s.spent/s.total)*100):0;
-return `<div>
-${s.name} ₹${s.spent}/${s.total}
-<div class="bar"><div class="fill" style="width:${pct}%"></div></div>
-</div>`;
-}).join('');
+  // sources
+  document.getElementById('sources').innerHTML =
+    S.sources.map(s=>{
+      const spent = S.expenses
+        .filter(e=>e.src==s.id)
+        .reduce((a,b)=>a+b.amt,0);
 
-const eEl=document.getElementById('expenses');
-eEl.innerHTML=S.expenses.map(e=>`<div>
-₹${e.amt}
-<button onclick="deleteExpense(${e.id})">❌</button>
-</div>`).join('');
+      const pct = s.total ? (spent/s.total)*100 : 0;
+
+      return `<div>
+        ${s.name} ₹${spent}/${s.total}
+        <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+
+  // expenses
+  document.getElementById('expenses').innerHTML =
+    S.expenses.map(e=>`
+      <div>
+        ₹${e.amt}
+        <button onclick="deleteExpense(${e.id})">❌</button>
+      </div>
+    `).join('');
 }
 
 function toggleSidebar(){
-document.querySelector('.sidebar').classList.toggle('collapsed');
+  document.querySelector('.sidebar').classList.toggle('collapsed');
 }
 
-function copyShareLink(){navigator.clipboard.writeText(window.location.href);alert('Copied');}
+function copyShareLink(){
+  navigator.clipboard.writeText(window.location.href);
+  alert('Copied');
+}
 
 function downloadBackup(){
-const a=document.createElement('a');
-a.href='data:application/json,'+encodeURIComponent(JSON.stringify(S));
-a.download='backup.json';
-a.click();
+  const a=document.createElement('a');
+  a.href='data:application/json,'+encodeURIComponent(JSON.stringify(S));
+  a.download='backup.json';
+  a.click();
 }
 
 function uploadBackup(e){
-const r=new FileReader();
-r.onload=()=>{S=JSON.parse(r.result);save();render();};
-r.readAsText(e.target.files[0]);
+  const r=new FileReader();
+  r.onload=()=>{
+    S=JSON.parse(r.result);
+    save();
+    render();
+  };
+  r.readAsText(e.target.files[0]);
 }
 
 function start(){
-load();
-normalizeData();
-render();
-setTimeout(()=>{initFirebase();loadCloud();},500);
+  load();
+  normalizeData();
+  render();
+  setTimeout(()=>{
+    initFirebase();
+    loadCloud();
+  },500);
 }
 
 window.onload=start;
