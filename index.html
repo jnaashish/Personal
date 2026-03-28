@@ -177,14 +177,36 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 .mt1{margin-top:6px}.mt2{margin-top:12px}.mt3{margin-top:20px}
 .tr{text-align:right}.td{color:var(--danger)}.tg{color:var(--success)}.tm{color:var(--muted)}
 .mono{font-family:'IBM Plex Mono',monospace}.fw6{font-weight:600}
-@media(max-width:768px){.sidebar{width:60px}.sb-brand,.nl,.nb span,.dl{display:none}.nb{justify-content:center}.main{padding:24px 16px 60px}.sg{grid-template-columns:1fr 1fr}.fg,.fg3{grid-template-columns:1fr}}
+/* ── MOBILE SIDEBAR DRAWER ── */
+.sb-toggle{display:none;position:fixed;top:12px;left:12px;z-index:200;width:40px;height:40px;border-radius:10px;background:var(--ink);border:none;cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:5px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.sb-toggle span{display:block;width:18px;height:2px;background:#fff;border-radius:2px;transition:all .25s}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:149;backdrop-filter:blur(2px)}
+@media(max-width:768px){
+  .sb-toggle{display:flex}
+  .sidebar{position:fixed;left:-260px;top:0;height:100vh;width:240px;z-index:150;transition:left .3s cubic-bezier(.4,0,.2,1);box-shadow:none}
+  .sidebar.open{left:0;box-shadow:4px 0 32px rgba(0,0,0,.35)}
+  .sidebar.open ~ .sb-overlay{display:block}
+  .main{padding:20px 14px 80px;margin-top:0}
+  .main>*{margin-top:4px}
+  /* Give space for the hamburger */
+  .sec.active .sh{padding-top:44px}
+  .sg{grid-template-columns:1fr 1fr}
+  .fg,.fg3{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 <body>
 <div class="shell">
 
+<!-- MOBILE HAMBURGER TOGGLE -->
+<button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" aria-label="Menu">
+  <span></span><span></span><span></span>
+</button>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+
 <!-- SIDEBAR -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="sb-brand"><h1>Build<br>Ledger</h1><p>Construction Finance</p></div>
   <nav class="sb-nav">
     <div class="nl">Overview</div>
@@ -345,7 +367,13 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 
 <!-- ANALYTICS -->
 <section id="sec-analytics" class="sec">
-  <div class="sh"><h2>Analytics</h2><p>Understand your construction spending</p></div>
+  <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div><h2>Analytics</h2><p>Understand your construction spending</p></div>
+    <div class="flex gap2" style="padding-top:8px" id="an-export">
+      <button class="btn bgr sm" onclick="exportXLSX()">⬇ Excel (.xls)</button>
+      <button class="btn bs sm" onclick="exportCSV()">⬇ CSV</button>
+    </div>
+  </div>
   <div class="sg">
     <div class="sc t1"><div class="sl">Total Budget</div><div class="sv" id="an-total">₹0</div></div>
     <div class="sc t2"><div class="sl">Spent</div><div class="sv" id="an-spent">₹0</div></div>
@@ -863,13 +891,26 @@ function initFirestore(){
     db=firebase.firestore();
     fsConnected=true;
     localStorage.setItem('bl_fsDocId',fsDocId);
-    // Write current local data first, then subscribe
-    fsWrite().then(()=>{
+    // FIX: Always pull cloud first. Only write if cloud doc doesn't exist yet.
+    // This prevents a fresh device from overwriting existing data with zeros.
+    db.collection('ledger').doc(fsDocId).get().then(doc=>{
+      if(doc.exists){
+        // Cloud has data — pull it, don't push local (which may be empty)
+        const remote=doc.data();
+        S=remote;
+        localStorage.setItem('bl2',JSON.stringify(S));
+        renderDash();refreshDrops();renderCats();
+        syncTimestamp();
+        toast('✓ Connected! Data loaded from cloud.');
+      } else {
+        // Cloud is empty — this is the first-ever save, push local data up
+        fsWrite().then(()=>toast('✓ Connected! Data saved to cloud.'));
+      }
+      // Subscribe to live updates regardless
       fsSubscribe();
       updDrvUI(true);
       cm('mo-drive');
-      toast('✓ Connected! Live sync active.');
-    });
+    }).catch(e=>{setDot('');toast('Firebase connect error: '+e.message,'e');console.error(e);});
   }catch(e){setDot('');toast('Firebase error: '+e.message,'e');console.error(e);}
 }
 
@@ -943,6 +984,22 @@ function setDot(s){
   const d=document.getElementById('ddot');d.className='ddot'+(s==='on'?' on':s==='sync'?' sync':'');
   document.getElementById('dlabel').textContent=s==='sync'?'Syncing…':(fsConnected?'Firebase: live':'Firebase: offline');
 }
+
+// ━━━ MOBILE SIDEBAR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('sb-overlay');
+  const open=sb.classList.toggle('open');
+  ov.style.display=open?'block':'none';
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').style.display='none';
+}
+// Close sidebar when a nav item is clicked on mobile
+document.addEventListener('click',e=>{
+  if(e.target.closest('.nb')&&window.innerWidth<=768)closeSidebar();
+});
 
 // ━━━ INIT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function init(){
