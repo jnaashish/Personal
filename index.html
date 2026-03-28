@@ -416,6 +416,53 @@ tbody td:first-child{color:var(--ink);font-weight:500}
   </div>
 </div>
 
+
+<!-- EDIT EXPENSE MODAL -->
+<div class="mo" id="mo-edit-exp">
+  <div class="modal">
+    <h3>Edit Expense</h3>
+    <p class="msub">Update date, description, source, category or amount</p>
+    <input type="hidden" id="ee-id"/>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd"><label>Date</label><input type="date" id="ee-date"/></div>
+      <div class="fd"><label>Amount (₹)</label><input type="number" id="ee-amt" placeholder="e.g. 50000"/></div>
+    </div>
+    <div class="fd mt2"><label>Description</label><input id="ee-desc" placeholder="Description"/></div>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd"><label>Category</label><select id="ee-cat"></select></div>
+      <div class="fd"><label>Paid From (Source)</label><select id="ee-src"></select></div>
+    </div>
+    <div class="fd mt2"><label>Notes</label><input id="ee-notes" placeholder="Notes (optional)"/></div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-edit-exp')">Cancel</button>
+      <button class="btn bp" onclick="saveEditExp()">✓ Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT SOURCE MODAL -->
+<div class="mo" id="mo-edit-src">
+  <div class="modal">
+    <h3>Edit Source</h3>
+    <p class="msub">Update the total sanctioned amount, name, or notes</p>
+    <input type="hidden" id="es-id"/>
+    <div class="fd mt2"><label>Source Name</label><input id="es-name" placeholder="Source name"/></div>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd">
+        <label>Total Sanctioned (₹)</label>
+        <input type="number" id="es-total" placeholder="e.g. 2000000"/>
+        <span style="font-size:11px;color:var(--muted);margin-top:4px">Must be ≥ amount already received</span>
+      </div>
+      <div class="fd"><label>Type</label><select id="es-type"><option value="personal">Personal / Family</option><option value="loan">Bank Loan</option><option value="savings">Savings</option><option value="other">Other</option></select></div>
+    </div>
+    <div class="fd mt2"><label>Notes</label><input id="es-notes" placeholder="Optional notes"/></div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-edit-src')">Cancel</button>
+      <button class="btn bp" onclick="saveEditSrc()">✓ Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="mo" id="mo-del">
   <div class="modal">
     <h3>Confirm Delete</h3><p id="del-msg" style="color:var(--muted);margin-top:8px;font-size:14px">Are you sure?</p>
@@ -601,6 +648,7 @@ function renderSrc(){
       ${src.notes?`<div style="font-size:12px;color:var(--muted);margin-top:8px;font-style:italic">${src.notes}</div>`:''}
       <div class="src-actions">
         <button class="btn bs sm" onclick="openUpdSrc('${src.id}')">＋ Update Received</button>
+        <button class="btn bs sm" onclick="openEditSrc('${src.id}')" title="Edit source details">✏️ Edit</button>
         <button class="btn bd sm" onclick="delSrc('${src.id}')">Delete</button>
       </div>
     </div>`;
@@ -649,7 +697,7 @@ function renderExpTable(){
   body.innerHTML=fil.map(e=>{
     const cat=S.categories.find(c=>c.id===e.category);
     const src=S.sources.find(s=>s.id===e.source);
-    return`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fd(e.date)}</td><td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${cat?.color||'#aaa'};flex-shrink:0"></span>${cat?.name||'—'}</span></td><td>${e.desc}</td><td>${src?`<span class="badge bb">${src.name}</span>`:'<span style="color:var(--muted)">—</span>'}</td><td style="font-size:12px;color:var(--muted)">${e.notes||'—'}</td><td class="tr mono fw6">${fmt(e.amount)}</td><td><button class="btn bd sm" onclick="delExp('${e.id}')">×</button></td></tr>`;
+    return`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fd(e.date)}</td><td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${cat?.color||'#aaa'};flex-shrink:0"></span>${cat?.name||'—'}</span></td><td>${e.desc}</td><td>${src?`<span class="badge bb">${src.name}</span>`:'<span style="color:var(--muted)">—</span>'}</td><td style="font-size:12px;color:var(--muted)">${e.notes||'—'}</td><td class="tr mono fw6">${fmt(e.amount)}</td><td style="white-space:nowrap"><button class="btn bs sm" onclick="openEditExp('${e.id}')" style="margin-right:4px" title="Edit">✏️</button><button class="btn bd sm" onclick="delExp('${e.id}')" title="Delete">×</button></td></tr>`;
   }).join('');
 }
 function exportCSV(){
@@ -983,6 +1031,69 @@ function updDrvUI(on){
 function setDot(s){
   const d=document.getElementById('ddot');d.className='ddot'+(s==='on'?' on':s==='sync'?' sync':'');
   document.getElementById('dlabel').textContent=s==='sync'?'Syncing…':(fsConnected?'Firebase: live':'Firebase: offline');
+}
+
+
+// ━━━ EDIT EXPENSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function openEditExp(id){
+  const e=S.expenses.find(x=>x.id===id);
+  if(!e)return;
+  document.getElementById('ee-id').value=id;
+  document.getElementById('ee-date').value=e.date;
+  document.getElementById('ee-amt').value=e.amount;
+  document.getElementById('ee-desc').value=e.desc;
+  document.getElementById('ee-notes').value=e.notes||'';
+  // Populate dropdowns
+  const catSel=document.getElementById('ee-cat');
+  const srcSel=document.getElementById('ee-src');
+  catSel.innerHTML=S.categories.map(c=>`<option value="${c.id}"${c.id===e.category?' selected':''}>${c.name}</option>`).join('');
+  srcSel.innerHTML='<option value="">— No specific source —</option>'+S.sources.map(s=>`<option value="${s.id}"${s.id===e.source?' selected':''}>${s.name}</option>`).join('');
+  om('mo-edit-exp');
+}
+function saveEditExp(){
+  const id=document.getElementById('ee-id').value;
+  const date=document.getElementById('ee-date').value;
+  const amt=parseFloat(document.getElementById('ee-amt').value)||0;
+  const desc=document.getElementById('ee-desc').value.trim();
+  const cat=document.getElementById('ee-cat').value;
+  const src=document.getElementById('ee-src').value;
+  const notes=document.getElementById('ee-notes').value.trim();
+  if(!date){toast('Select a date','e');return}
+  if(!desc){toast('Enter a description','e');return}
+  if(amt<=0){toast('Enter a valid amount','e');return}
+  const exp=S.expenses.find(x=>x.id===id);
+  if(!exp)return;
+  exp.date=date; exp.amount=amt; exp.desc=desc;
+  exp.category=cat; exp.source=src; exp.notes=notes;
+  S.expenses.sort((a,b)=>b.date.localeCompare(a.date));
+  save(); cm('mo-edit-exp'); renderExp(); renderDash();
+  toast('✓ Expense updated!');
+}
+
+// ━━━ EDIT SOURCE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function openEditSrc(id){
+  const src=S.sources.find(s=>s.id===id);
+  if(!src)return;
+  document.getElementById('es-id').value=id;
+  document.getElementById('es-name').value=src.name;
+  document.getElementById('es-total').value=src.total;
+  document.getElementById('es-type').value=src.type||'personal';
+  document.getElementById('es-notes').value=src.notes||'';
+  om('mo-edit-src');
+}
+function saveEditSrc(){
+  const id=document.getElementById('es-id').value;
+  const name=document.getElementById('es-name').value.trim();
+  const total=parseFloat(document.getElementById('es-total').value)||0;
+  const type=document.getElementById('es-type').value;
+  const notes=document.getElementById('es-notes').value.trim();
+  if(!name){toast('Enter source name','e');return}
+  const src=S.sources.find(s=>s.id===id);
+  if(!src)return;
+  if(total<src.recv){toast(`Total cannot be less than already received (${fmt(src.recv)})`,'e');return}
+  src.name=name; src.total=total; src.type=type; src.notes=notes;
+  save(); cm('mo-edit-src'); renderSrc(); renderDash(); refreshDrops();
+  toast('✓ Source updated!');
 }
 
 // ━━━ MOBILE SIDEBAR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
