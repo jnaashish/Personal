@@ -564,6 +564,38 @@ tbody td:first-child{color:var(--ink);font-weight:500}
   </div>
 </div>
 
+
+<!-- FIRESTORE PERMISSION ERROR MODAL -->
+<div class="mo" id="mo-perm-error">
+  <div class="modal">
+    <h3>⚠️ Firebase Permission Error</h3>
+    <p class="msub">Your Firestore security rules don't allow writing to the <strong>docs</strong> collection yet. Files are saved locally for now — fix this once and they'll sync forever.</p>
+    <div class="ds" style="margin-bottom:0">
+      <div class="dsn">Fix — Update your Firestore Rules</div>
+      <p style="margin-bottom:10px">Go to <strong>console.firebase.google.com</strong> → your project → <strong>Firestore Database</strong> → <strong>Rules</strong> tab and replace with:</p>
+      <div style="background:var(--ink);color:#e8f4e8;padding:14px 16px;border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.7;white-space:pre;overflow-x:auto">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /ledger/{docId} {
+      allow read, write: if true;
+    }
+    match /docs/{docId} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}</div>
+      <p style="margin-top:10px;font-size:13px">Then click <strong>Publish</strong>. After that, re-upload your files and they'll sync across all devices.</p>
+    </div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-perm-error')">Close</button>
+      <button class="btn bp" onclick="window.open('https://console.firebase.google.com','_blank');cm('mo-perm-error')">Open Firebase Console</button>
+    </div>
+  </div>
+</div>
+
 <!-- UPLOAD DOCUMENT MODAL -->
 <div class="mo" id="mo-upload-doc">
   <div class="modal">
@@ -1502,16 +1534,16 @@ async function compressImage(file){
 }
 
 function processDocFiles(files){
-  document.getElementById('doc-size-warn').style.display='none';
+  const w=document.getElementById('doc-size-warn');
+  w.style.display='none';w.innerHTML='';
   let oversize=[];
   let promises=[];
   Array.from(files).forEach(file=>{
     if(isImage(file.type)){
-      // Always compress images regardless of size
       promises.push(
         compressImage(file).then(result=>{
           pendingDocFiles.push({
-            name:file.name.replace(/\.[^.]+$/,'.jpg'), // normalise to .jpg
+            name:file.name.replace(/\.[^.]+$/,'.jpg'),
             type:result.type,size:result.size,b64:result.b64,
             compressed:true,origSize:file.size
           });
@@ -1519,7 +1551,16 @@ function processDocFiles(files){
         })
       );
     } else {
-      if(file.size>MAX_NON_IMAGE){oversize.push(file.name);return;}
+      if(file.size>MAX_NON_IMAGE){
+        oversize.push(file.name);
+        // Show warning immediately, not after promise
+        w.style.display='';
+        w.innerHTML='⚠ <strong>'+oversize.length+' file(s) too large</strong> (max 700KB for PDFs/docs):<br>'
+          +'<em style="word-break:break-all">'+oversize.join(', ')+'</em><br>'
+          +'Compress at <a href="https://smallpdf.com" target="_blank" style="color:var(--danger);font-weight:600">smallpdf.com</a> then re-select.'
+          +(pendingDocFiles.length===0?'<br><strong style="color:var(--danger)">No valid files selected yet.</strong>':'');
+        return;
+      }
       const reader=new FileReader();
       reader.onload=ev=>{
         pendingDocFiles.push({name:file.name,type:file.type,size:file.size,b64:ev.target.result});
@@ -1528,11 +1569,16 @@ function processDocFiles(files){
       reader.readAsDataURL(file);
     }
   });
-  Promise.all(promises).then(()=>{if(oversize.length){
-    const w=document.getElementById('doc-size-warn');
-    w.style.display='';
-    w.innerHTML='⚠ '+oversize.length+' file(s) exceed 700KB and were skipped: <em>'+oversize.join(', ')+'</em>. Compress PDFs at <a href="https://smallpdf.com" target="_blank">smallpdf.com</a> before uploading.';
-  }});
+  Promise.all(promises).then(()=>{
+    // Update warning after all processing done — show combined oversize + valid count
+    if(oversize.length){
+      w.style.display='';
+      w.innerHTML='⚠ <strong>'+oversize.length+' file(s) too large</strong> (max 700KB for PDFs/docs):<br>'
+        +'<em style="word-break:break-all">'+oversize.join(', ')+'</em><br>'
+        +'Compress at <a href="https://smallpdf.com" target="_blank" style="color:var(--danger);font-weight:600">smallpdf.com</a> then re-select.'
+        +(pendingDocFiles.length>0?'<br><span style="color:var(--success)">✓ '+pendingDocFiles.length+' other file(s) ready to upload.</span>':'<br><strong style="color:var(--danger)">No valid files selected — please compress and try again.</strong>');
+    }
+  });
 }
 
 function renderPendingFiles(){
@@ -1588,9 +1634,24 @@ document.addEventListener('click',e=>{
   }
 });
 
+
+// Show Firestore permission error with fix instructions
+function showDocsPermissionError(){
+  toast('Firebase permission error — files saved locally. See fix instructions.','e');
+  om('mo-perm-error');
+}
+
 // Upload
 async function uploadDocs(){
-  if(!pendingDocFiles.length){toast('Select at least one file','e');return;}
+  if(!pendingDocFiles.length){
+    const w=document.getElementById('doc-size-warn');
+    if(w&&w.innerHTML&&w.innerHTML.includes('exceed')){
+      toast('All selected files exceeded the size limit — please compress them first','e');
+    } else {
+      toast('Select at least one file','e');
+    }
+    return;
+  }
   const cat=document.getElementById('doc-cat').value;
   const expLink=document.getElementById('doc-exp-link').value;
   const notes=document.getElementById('doc-notes').value.trim();
@@ -1606,15 +1667,28 @@ async function uploadDocs(){
   if(fsConnected&&db){
     try{
       await Promise.all(newDocs.map(doc=>db.collection('docs').doc(doc.id).set(doc)));
+      // Also save to localStorage as backup
+      const ld=JSON.parse(localStorage.getItem('bl_docs')||'[]');
+      const ids=new Set(newDocs.map(d=>d.id));
+      localStorage.setItem('bl_docs',JSON.stringify([...ld.filter(d=>!ids.has(d.id)),...newDocs]));
       toast(`✓ ${newDocs.length} file${newDocs.length!==1?'s':''} uploaded to cloud`);
     }catch(e){
+      // Save locally as fallback
       const ld=JSON.parse(localStorage.getItem('bl_docs')||'[]');
-      localStorage.setItem('bl_docs',JSON.stringify([...ld,...newDocs]));
-      toast('Saved locally (Firebase error: '+e.message+')','i');
+      const ids=new Set(newDocs.map(d=>d.id));
+      localStorage.setItem('bl_docs',JSON.stringify([...ld.filter(d=>!ids.has(d.id)),...newDocs]));
+      docsCache=JSON.parse(localStorage.getItem('bl_docs')||'[]');
+      if(e.message&&e.message.includes('permission')){
+        showDocsPermissionError();
+      } else {
+        toast('Saved locally. Firebase error: '+e.message,'i');
+      }
     }
   } else {
     const ld=JSON.parse(localStorage.getItem('bl_docs')||'[]');
-    localStorage.setItem('bl_docs',JSON.stringify([...ld,...newDocs]));
+    const ids=new Set(newDocs.map(d=>d.id));
+    localStorage.setItem('bl_docs',JSON.stringify([...ld.filter(d=>!ids.has(d.id)),...newDocs]));
+    docsCache=JSON.parse(localStorage.getItem('bl_docs')||'[]');
     toast(`✓ ${newDocs.length} file${newDocs.length!==1?'s':''} saved locally`);
   }
 
@@ -1656,6 +1730,9 @@ async function loadDocs(){
   if(fsConnected&&db){
     if(docsCache!==null)return docsCache;
     // Cache not ready yet — subscription is in-flight, return null to show loading
+    // But fall back to localStorage if we have local data (e.g. permission errors)
+    const local=JSON.parse(localStorage.getItem('bl_docs')||'[]');
+    if(local.length>0)return local; // show local files while cloud loads
     return null;
   }
   return JSON.parse(localStorage.getItem('bl_docs')||'[]');
