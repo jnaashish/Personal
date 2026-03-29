@@ -22,7 +22,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 /* LAYOUT */
 .shell{display:flex;min-height:100vh}
 .sidebar{width:240px;flex-shrink:0;background:var(--ink);color:#e8e0d4;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-.sb-brand{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sb-brand{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,.08);transition:padding .3s}
 .sb-brand h1{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:#fff;letter-spacing:-.5px;line-height:1.1}
 .sb-brand p{font-size:11px;color:rgba(255,255,255,.35);font-family:'IBM Plex Mono',monospace;margin-top:4px;letter-spacing:1px;text-transform:uppercase}
 .sb-nav{padding:20px 12px;flex:1;display:flex;flex-direction:column;gap:4px}
@@ -178,24 +178,34 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 .tr{text-align:right}.td{color:var(--danger)}.tg{color:var(--success)}.tm{color:var(--muted)}
 .mono{font-family:'IBM Plex Mono',monospace}.fw6{font-weight:600}
 /* ── MOBILE SIDEBAR DRAWER ── */
-.sb-toggle{display:none;position:fixed;top:12px;left:12px;z-index:200;width:40px;height:40px;border-radius:10px;background:var(--ink);border:none;cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:5px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.sb-toggle{display:none;position:fixed;top:10px;right:12px;left:auto;z-index:200;width:40px;height:40px;border-radius:10px;background:var(--ink);border:none;cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:5px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .sb-toggle span{display:block;width:18px;height:2px;background:#fff;border-radius:2px;transition:all .25s}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:149;backdrop-filter:blur(2px)}
 @media(max-width:768px){
   .sb-toggle{display:flex}
   .sidebar{position:fixed;left:-260px;top:0;height:100vh;width:240px;z-index:150;transition:left .3s cubic-bezier(.4,0,.2,1);box-shadow:none}
   .sidebar.open{left:0;box-shadow:4px 0 32px rgba(0,0,0,.35)}
+  .sidebar .sb-brand{padding-top:20px}
   .sidebar.open ~ .sb-overlay{display:block}
   .main{padding:20px 14px 80px;margin-top:0}
   .main>*{margin-top:4px}
   /* Give space for the hamburger */
-  .sec.active .sh{padding-top:44px}
+  .sec.active .sh{padding-top:12px}
+  .main{padding-top:58px !important}
+  .mob-topbar{display:flex !important}
   .sg{grid-template-columns:1fr 1fr}
   .fg,.fg3{grid-template-columns:1fr}
+  .fd input,.fd select,.fd textarea{width:100%;min-width:0}
   .stat-grid{grid-template-columns:1fr 1fr}
 }
 
 /* ── DOCUMENTS ── */
+.doc-folder-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-bottom:8px}
+.folder-card{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:20px 16px;text-align:center;cursor:pointer;transition:all .2s;box-shadow:var(--shadow)}
+.folder-card:hover{border-color:var(--accent);box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.folder-icon{font-size:44px;margin-bottom:10px;line-height:1}
+.folder-name{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.folder-count{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
 .doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:4px}
 .doc-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow);transition:box-shadow .2s,border-color .2s;position:relative;display:flex;flex-direction:column;gap:8px}
 .doc-card:hover{box-shadow:var(--shadow-lg);border-color:var(--accent)}
@@ -219,10 +229,13 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 <body>
 <div class="shell">
 
-<!-- MOBILE HAMBURGER TOGGLE -->
-<button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" aria-label="Menu">
-  <span></span><span></span><span></span>
-</button>
+<!-- MOBILE TOP BAR -->
+<div class="mob-topbar" style="display:none;position:fixed;top:0;left:0;right:0;height:52px;background:var(--ink);z-index:148;align-items:center;padding:0 16px;justify-content:space-between">
+  <span style="font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:#fff;letter-spacing:-.5px">BuildLedger</span>
+  <button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" aria-label="Menu" style="position:static;display:flex;box-shadow:none;background:rgba(255,255,255,.15)">
+    <span></span><span></span><span></span>
+  </button>
+</div>
 <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
 
 <!-- SIDEBAR -->
@@ -274,42 +287,58 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 
 <!-- SOURCES -->
 <section id="sec-sources" class="sec">
-  <div class="sh"><h2>Fund Sources</h2><p>Track where your construction money comes from</p></div>
-  <div class="card">
-    <div class="ch"><div class="ct">Add New Source</div></div>
-    <div class="fg fg3">
-      <div class="fd"><label>Source Name</label><input id="src-name" placeholder="e.g. Dad, SBI Loan…"/></div>
-      <div class="fd"><label>Type</label><select id="src-type"><option value="personal">Personal / Family</option><option value="loan">Bank Loan</option><option value="savings">Savings</option><option value="other">Other</option></select></div>
-      <div class="fd"><label>Total Sanctioned (₹)</label><input type="number" id="src-total" placeholder="e.g. 1000000"/></div>
+  <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div><h2>Fund Sources</h2><p>Track where your construction money comes from</p></div>
+    <button class="btn bp" onclick="toggleAddForm('add-src-form',this)" id="btn-add-src">＋ Add Source</button>
+  </div>
+  <!-- Collapsed add form -->
+  <div id="add-src-form" style="display:none">
+    <div class="card" style="margin-bottom:20px">
+      <div class="fg fg3">
+        <div class="fd"><label>Source Name</label><input id="src-name" placeholder="e.g. Dad, SBI Loan…"/></div>
+        <div class="fd"><label>Type</label><select id="src-type"><option value="personal">Personal / Family</option><option value="loan">Bank Loan</option><option value="savings">Savings</option><option value="other">Other</option></select></div>
+        <div class="fd"><label>Total Sanctioned (₹)</label><input type="number" id="src-total" placeholder="e.g. 1000000"/></div>
+      </div>
+      <div class="fg mt2" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="fd"><label>Amount Received (₹)</label><input type="number" id="src-recv" placeholder="In hand now"/></div>
+        <div class="fd"><label>Date</label><input type="date" id="src-date"/></div>
+        <div class="fd"><label>Notes</label><input id="src-notes" placeholder="Optional…" style="min-width:0;width:100%"/></div>
+      </div>
+      <div class="mt3 flex gap2">
+        <button class="btn bp" onclick="addSource()">＋ Add Source</button>
+        <button class="btn bs" onclick="toggleAddForm('add-src-form',document.getElementById('btn-add-src'))">Cancel</button>
+      </div>
     </div>
-    <div class="fg mt2" style="grid-template-columns:1fr 1fr 2fr">
-      <div class="fd"><label>Amount Received (₹)</label><input type="number" id="src-recv" placeholder="In hand now"/></div>
-      <div class="fd"><label>Date</label><input type="date" id="src-date"/></div>
-      <div class="fd"><label>Notes</label><input id="src-notes" placeholder="Optional…"/></div>
-    </div>
-    <div class="mt3"><button class="btn bp" onclick="addSource()">＋ Add Source</button></div>
   </div>
   <div class="src-grid" id="src-grid"></div>
 </section>
 
 <!-- EXPENSES -->
 <section id="sec-expenses" class="sec">
-  <div class="sh"><h2>Expenses</h2><p>Record all construction payments</p></div>
-  <div class="card">
-    <div class="ch"><div class="ct">Add New Expense</div></div>
-    <div class="fg fg3">
-      <div class="fd"><label>Date</label><input type="date" id="exp-date"/></div>
-      <div class="fd"><label>Category</label><select id="exp-cat"></select></div>
-      <div class="fd"><label>Paid From (Source)</label><select id="exp-src"></select></div>
-    </div>
-    <div class="fg mt2">
-      <div class="fd"><label>Description</label><input id="exp-desc" placeholder="e.g. Builder payment – Phase 2"/></div>
-      <div class="fd"><label>Amount (₹)</label><input type="number" id="exp-amt" placeholder="e.g. 50000"/></div>
-    </div>
-    <div class="fd mt2"><label>Notes</label><textarea id="exp-notes" placeholder="Receipt no., contractor details…"></textarea></div>
-    <div class="mt3 flex gap2">
-      <button class="btn bp" onclick="addExpense()">＋ Add Expense</button>
+  <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div><h2>Expenses</h2><p>Record all construction payments</p></div>
+    <div class="flex gap2">
+      <button class="btn bp" onclick="toggleAddForm('add-exp-form',this)" id="btn-add-exp">＋ Add Expense</button>
       <button class="btn bs" onclick="go('import')">📥 Bulk Import</button>
+    </div>
+  </div>
+  <!-- Collapsed add form -->
+  <div id="add-exp-form" style="display:none">
+    <div class="card" style="margin-bottom:20px">
+      <div class="fg fg3">
+        <div class="fd"><label>Date</label><input type="date" id="exp-date"/></div>
+        <div class="fd"><label>Category</label><select id="exp-cat"></select></div>
+        <div class="fd"><label>Paid From (Source)</label><select id="exp-src"></select></div>
+      </div>
+      <div class="fg mt2">
+        <div class="fd"><label>Description</label><input id="exp-desc" placeholder="e.g. Builder payment – Phase 2"/></div>
+        <div class="fd"><label>Amount (₹)</label><input type="number" id="exp-amt" placeholder="e.g. 50000"/></div>
+      </div>
+      <div class="fd mt2"><label>Notes</label><textarea id="exp-notes" placeholder="Receipt no., contractor details…"></textarea></div>
+      <div class="mt3 flex gap2">
+        <button class="btn bp" onclick="addExpense()">＋ Save Expense</button>
+        <button class="btn bs" onclick="toggleAddForm('add-exp-form',document.getElementById('btn-add-exp'))">Cancel</button>
+      </div>
     </div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
@@ -420,27 +449,26 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 <section id="sec-documents" class="sec">
   <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
     <div><h2>Documents</h2><p>Plans, approvals, bills and site documents</p></div>
-    <div class="flex gap2" style="padding-top:8px">
-      <button class="btn bp sm" onclick="om('mo-upload-doc')">＋ Upload Document</button>
-      <button class="btn bgr sm" onclick="downloadAllDocs()">⬇ Download All</button>
+    <div class="flex gap2" style="padding-top:8px;flex-wrap:wrap">
+      <button class="btn bp sm" onclick="openDocUploadModal()">＋ Upload Document</button>
+      <button class="btn bs sm" onclick="om('mo-folders')">🗂 Manage Folders</button>
+      <button class="btn bgr sm" onclick="downloadAllFolders()">⬇ Download All</button>
     </div>
   </div>
 
-  <!-- Category tabs -->
-  <div class="doc-cat-tabs" id="doc-cat-tabs">
-    <div class="doc-cat-tab active" onclick="filtDocs('all',this)">All</div>
-    <div class="doc-cat-tab" onclick="filtDocs('Plans',this)">📐 Plans</div>
-    <div class="doc-cat-tab" onclick="filtDocs('Approvals',this)">✅ Approvals</div>
-    <div class="doc-cat-tab" onclick="filtDocs('Bills',this)">🧾 Bills</div>
-    <div class="doc-cat-tab" onclick="filtDocs('Contracts',this)">📋 Contracts</div>
-    <div class="doc-cat-tab" onclick="filtDocs('Photos',this)">📷 Photos</div>
-    <div class="doc-cat-tab" onclick="filtDocs('Other',this)">📎 Other</div>
+  <!-- Breadcrumb bar — hidden when at root -->
+  <div id="doc-breadcrumb" style="display:none;align-items:center;gap:8px;margin-bottom:20px;font-size:14px">
+    <button onclick="openFolder(null)" style="background:none;border:none;cursor:pointer;color:var(--accent);font-weight:600;font-family:'IBM Plex Sans',sans-serif;padding:0;font-size:14px">📁 Documents</button>
+    <span style="color:var(--muted)">›</span>
+    <span id="doc-breadcrumb-name" style="font-weight:600;color:var(--ink)"></span>
+    <button class="btn bgr sm" style="margin-left:auto" onclick="downloadFolderDocs()" id="doc-dl-folder">⬇ Download Folder</button>
   </div>
 
-  <!-- Document grid -->
-  <div id="doc-grid" class="doc-grid">
-    <div class="empty" style="grid-column:1/-1"><div class="ei">📁</div><p>No documents yet</p><small>Upload plans, approvals, bills and other construction documents</small></div>
-  </div>
+  <!-- Folder grid (shown at root) -->
+  <div id="doc-folder-grid" class="doc-folder-grid"></div>
+
+  <!-- File grid (shown inside a folder) -->
+  <div id="doc-grid" class="doc-grid" style="display:none"></div>
 </section>
 
 
@@ -520,20 +548,36 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 </div>
 
 
+
+<!-- MANAGE FOLDERS MODAL -->
+<div class="mo" id="mo-folders">
+  <div class="modal">
+    <h3>Manage Folders</h3>
+    <p class="msub">Add or remove document folders</p>
+    <div id="folder-list-edit" style="margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;align-items:center;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px">
+      <input id="new-folder-icon" value="📁" style="width:44px;font-size:20px;text-align:center;background:transparent;border:1px solid var(--border);border-radius:8px;padding:4px;cursor:pointer" title="Click and type an emoji"/>
+      <input id="new-folder-name" placeholder="New folder name…" style="flex:1;background:transparent;border:none;outline:none;font-family:'IBM Plex Sans',sans-serif;font-size:14px;color:var(--ink)"/>
+      <button class="btn bp sm" onclick="addFolder()">＋ Add</button>
+    </div>
+    <div class="ma"><button class="btn bp" onclick="cm('mo-folders')">Done</button></div>
+  </div>
+</div>
+
 <!-- UPLOAD DOCUMENT MODAL -->
 <div class="mo" id="mo-upload-doc">
   <div class="modal">
     <h3>Upload Document</h3>
-    <p class="msub">Plans, approvals, bills, contracts and site photos</p>
+    <p class="msub">Images are automatically compressed. PDFs and docs up to 700KB.</p>
 
     <!-- Drop zone -->
     <div class="drop-zone" id="doc-drop-zone" ondragover="docDov(event)" ondragleave="docDlv()" ondrop="docDrop(event)">
       <input type="file" id="doc-file-input" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.zip" onchange="docFileSelect(event)" multiple/>
       <div class="dz-icon">📂</div>
       <p>Drop files here or <strong>click to browse</strong></p>
-      <p style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Images, Word, Excel, ZIP · Max 800KB per file</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Images (auto-compressed), Word, Excel, ZIP · Images: any size · PDF/Docs: max 700KB</p>
     </div>
-    <div class="size-warn" id="doc-size-warn">⚠ File exceeds 800KB. Please compress or use a smaller file. Construction PDFs can be compressed at smallpdf.com</div>
+    <div class="size-warn" id="doc-size-warn"></div>
 
     <!-- Selected files preview -->
     <div id="doc-selected-files" style="margin-top:12px;display:none">
@@ -636,6 +680,11 @@ let S = {
     {id:'interiors',name:'Interiors',color:'#9c3a9c'},
     {id:'govt',name:'Govt / Approvals',color:'#6b4a20'},
     {id:'misc',name:'Miscellaneous',color:'#6b8a3a'},
+  ],
+  docFolders:[
+    {name:'Plans',icon:'📐'},{name:'Approvals',icon:'✅'},
+    {name:'Bills',icon:'🧾'},{name:'Drawings',icon:'✏️'},
+    {name:'Photos',icon:'📷'},{name:'Other',icon:'📎'}
   ]
 };
 let pDel=null, expCatFilt='all', expSrcFilt='all', impData=[];
@@ -651,7 +700,7 @@ function go(id){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
   document.querySelectorAll('.nb').forEach(b=>{if(b.getAttribute('onclick')?.includes("'"+id+"'"))b.classList.add('active');});
-  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{},documents:renderDocs})[id]?.();
+  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{},documents:()=>{docFilt=null;renderDocs();}})[id]?.();
 }
 
 // ━━━ UTILS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -705,7 +754,7 @@ function addSource(){
   const initHistory = recv>0 ? [{date, amount:recv, notes:'Initial receipt'}] : [];
   S.sources.push({id:uid(),name,type,total,recv,date,notes,history:initHistory});
   ['src-name','src-total','src-recv','src-date','src-notes'].forEach(i=>document.getElementById(i).value='');
-  save();renderSrc();refreshDrops();toast('Source added!');
+  save();renderSrc();refreshDrops();closeAddForms();toast('Source added!');
 }
 function openUpdSrc(id){
   const src=S.sources.find(s=>s.id===id);
@@ -828,7 +877,7 @@ function addExpense(){
   S.expenses.push({id:uid(),date,category:cat,source,desc,amount,notes});
   S.expenses.sort((a,b)=>b.date.localeCompare(a.date));
   ['exp-date','exp-desc','exp-amt','exp-notes'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
-  save();renderExp();renderDash();toast('Expense added!');
+  save();renderExp();renderDash();closeAddForms();toast('Expense added!');
 }
 function delExp(id){
   pDel={type:'expense',id};
@@ -1331,37 +1380,159 @@ function saveEditSrc(){
 
 
 // ━━━ DOCUMENTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let docFilt='all';
-let pendingDocFiles=[];  // Array of {name, type, size, b64}
+// ━━━ DOCUMENTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let docFilt=null; // null = root folder view, string = open folder name
+let pendingDocFiles=[];
+
+const DEFAULT_FOLDERS=[
+  {name:'Plans',      icon:'📐'},
+  {name:'Approvals',  icon:'✅'},
+  {name:'Bills',      icon:'🧾'},
+  {name:'Drawings',   icon:'✏️'},
+  {name:'Photos',     icon:'📷'},
+  {name:'Other',      icon:'📎'},
+];
+// Getter — always use this, never hardcoded list
+function getFolders(){return S.docFolders&&S.docFolders.length?S.docFolders:DEFAULT_FOLDERS;}
 
 const DOC_ICONS={
-  'pdf':'📄','jpg':'🖼️','jpeg':'🖼️','png':'🖼️','gif':'🖼️',
-  'doc':'📝','docx':'📝','xls':'📊','xlsx':'📊',
-  'txt':'📃','zip':'🗜️'
+  'pdf':'📄','jpg':'🖼️','jpeg':'🖼️','png':'🖼️','gif':'🖼️','webp':'🖼️',
+  'doc':'📝','docx':'📝','xls':'📊','xlsx':'📊','txt':'📃','zip':'🗜️'
 };
 function docIcon(name){const ext=(name.split('.').pop()||'').toLowerCase();return DOC_ICONS[ext]||'📎';}
-function fmtSize(bytes){if(bytes<1024)return bytes+'B';if(bytes<1048576)return(bytes/1024).toFixed(1)+'KB';return(bytes/1048576).toFixed(1)+'MB';}
+function fmtSize(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB';}
+function isImage(type){return type&&type.startsWith('image/');}
 
-// Drop zone handlers
+
+// ── FOLDER MANAGEMENT ──
+function renderFolderList(){
+  const list=document.getElementById('folder-list-edit');
+  if(!list)return;
+  const folders=getFolders();
+  list.innerHTML=folders.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:10px;margin-bottom:6px;border:1px solid var(--border)">
+      <span style="font-size:20px;width:28px;text-align:center">${f.icon}</span>
+      <span style="flex:1;font-size:14px;font-weight:600;color:var(--ink)">${f.name}</span>
+      <button onclick="deleteFolder(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:6px;transition:all .15s" title="Delete folder" onmouseover="this.style.background='var(--danger-light)';this.style.color='var(--danger)'" onmouseout="this.style.background='none';this.style.color='var(--muted)'">🗑</button>
+    </div>`).join('');
+  // Also refresh the folder category dropdown in upload modal
+  refreshFolderDropdown();
+}
+
+function addFolder(){
+  const icon=document.getElementById('new-folder-icon').value.trim()||'📁';
+  const name=document.getElementById('new-folder-name').value.trim();
+  if(!name){toast('Enter a folder name','e');return;}
+  if(getFolders().find(f=>f.name.toLowerCase()===name.toLowerCase())){toast('Folder already exists','e');return;}
+  S.docFolders=getFolders();
+  S.docFolders.push({name,icon});
+  document.getElementById('new-folder-name').value='';
+  document.getElementById('new-folder-icon').value='📁';
+  save();renderFolderList();renderDocs();
+  toast(`✓ Folder "${name}" created`);
+}
+
+function deleteFolder(idx){
+  const folders=getFolders();
+  const folder=folders[idx];
+  if(!folder)return;
+  // Safety check: warn if files exist in this folder
+  loadDocs().then(docs=>{
+    const count=docs.filter(d=>d.category===folder.name).length;
+    const msg=count>0
+      ? `Delete folder "${folder.name}"? It contains ${count} file${count!==1?'s':''}. The files won't be deleted but will become inaccessible until you recreate the folder.`
+      : `Delete folder "${folder.name}"?`;
+    if(!confirm(msg))return;
+    S.docFolders=[...folders];
+    S.docFolders.splice(idx,1);
+    save();renderFolderList();
+    if(docFilt===folder.name){docFilt=null;}
+    renderDocs();
+    toast(`Folder "${folder.name}" deleted`);
+  });
+}
+
+function refreshFolderDropdown(){
+  const sel=document.getElementById('doc-cat');
+  if(!sel)return;
+  const folders=getFolders();
+  sel.innerHTML=folders.map(f=>`<option value="${f.name}">${f.icon} ${f.name}</option>`).join('');
+  if(docFilt)sel.value=docFilt;
+}
+
+// Override openDriveModal to also render folder list
+const _origOpenFolders=window.openDocUploadModal;
+
+// ── Drop zone ──
 function docDov(e){e.preventDefault();document.getElementById('doc-drop-zone').classList.add('dov');}
 function docDlv(){document.getElementById('doc-drop-zone').classList.remove('dov');}
 function docDrop(e){e.preventDefault();docDlv();processDocFiles(e.dataTransfer.files);}
 function docFileSelect(e){processDocFiles(e.target.files);}
 
-function processDocFiles(files){
-  const MAX=820000; // ~800KB — leaves room for base64 overhead within 1MB Firestore limit
-  document.getElementById('doc-size-warn').style.display='none';
-  let hasOversize=false;
-  Array.from(files).forEach(file=>{
-    if(file.size>MAX){hasOversize=true;return;}
+// ── File processing: images auto-compressed, others accepted up to 700KB ──
+const MAX_NON_IMAGE = 720000; // 700KB for PDFs/docs (base64 ~33% larger = ~960KB, fits in 1MB)
+const IMAGE_MAX_DIM = 1600;   // resize images to max 1600px on longest side
+const IMAGE_QUALITY = 0.78;   // JPEG compression quality
+
+async function compressImage(file){
+  return new Promise(resolve=>{
     const reader=new FileReader();
     reader.onload=ev=>{
-      pendingDocFiles.push({name:file.name,type:file.type,size:file.size,b64:ev.target.result});
-      renderPendingFiles();
+      const img=new Image();
+      img.onload=()=>{
+        let {width:w,height:h}=img;
+        // Scale down if needed
+        if(w>IMAGE_MAX_DIM||h>IMAGE_MAX_DIM){
+          if(w>h){h=Math.round(h*IMAGE_MAX_DIM/w);w=IMAGE_MAX_DIM;}
+          else{w=Math.round(w*IMAGE_MAX_DIM/h);h=IMAGE_MAX_DIM;}
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        const compressed=canvas.toDataURL('image/jpeg',IMAGE_QUALITY);
+        // Estimate compressed size (base64 length * 0.75)
+        const estSize=Math.round(compressed.length*0.75);
+        resolve({b64:compressed,size:estSize,type:'image/jpeg'});
+      };
+      img.src=ev.target.result;
     };
     reader.readAsDataURL(file);
   });
-  if(hasOversize)document.getElementById('doc-size-warn').style.display='';
+}
+
+function processDocFiles(files){
+  document.getElementById('doc-size-warn').style.display='none';
+  let oversize=[];
+  let promises=[];
+  Array.from(files).forEach(file=>{
+    if(isImage(file.type)){
+      // Always compress images regardless of size
+      promises.push(
+        compressImage(file).then(result=>{
+          pendingDocFiles.push({
+            name:file.name.replace(/\.[^.]+$/,'.jpg'), // normalise to .jpg
+            type:result.type,size:result.size,b64:result.b64,
+            compressed:true,origSize:file.size
+          });
+          renderPendingFiles();
+        })
+      );
+    } else {
+      if(file.size>MAX_NON_IMAGE){oversize.push(file.name);return;}
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        pendingDocFiles.push({name:file.name,type:file.type,size:file.size,b64:ev.target.result});
+        renderPendingFiles();
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+  Promise.all(promises).then(()=>{if(oversize.length){
+    const w=document.getElementById('doc-size-warn');
+    w.style.display='';
+    w.innerHTML='⚠ '+oversize.length+' file(s) exceed 700KB and were skipped: <em>'+oversize.join(', ')+'</em>. Compress PDFs at <a href="https://smallpdf.com" target="_blank">smallpdf.com</a> before uploading.';
+  }});
 }
 
 function renderPendingFiles(){
@@ -1374,27 +1545,50 @@ function renderPendingFiles(){
       <span style="font-size:18px">${docIcon(f.name)}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">${fmtSize(f.size)}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">
+          ${fmtSize(f.size)}${f.compressed?' · <span style="color:var(--success)">✓ compressed from '+fmtSize(f.origSize)+'</span>':''}
+        </div>
       </div>
       <button onclick="removePendingFile(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;flex-shrink:0">×</button>
     </div>`).join('');
 }
 
 function removePendingFile(i){pendingDocFiles.splice(i,1);renderPendingFiles();}
-function clearDocUpload(){pendingDocFiles=[];renderPendingFiles();document.getElementById('doc-size-warn').style.display='none';document.getElementById('doc-file-input').value='';}
+function clearDocUpload(){
+  pendingDocFiles=[];
+  renderPendingFiles();
+  const w=document.getElementById('doc-size-warn');
+  if(w)w.style.display='none';
+  const fi=document.getElementById('doc-file-input');
+  if(fi)fi.value='';
+}
 
-// Populate expense link dropdown in upload modal
+// Populate expense link dropdown
 function refreshDocExpDrop(){
   const sel=document.getElementById('doc-exp-link');
   if(!sel)return;
   sel.innerHTML='<option value="">— Not linked to expense —</option>'+
-    S.expenses.map(e=>{
-      const cat=S.categories.find(c=>c.id===e.category);
-      return`<option value="${e.id}">${fd(e.date)} · ${e.desc.substring(0,30)} · ${fmt(e.amount)}</option>`;
-    }).join('');
+    S.expenses.map(e=>`<option value="${e.id}">${fd(e.date)} · ${e.desc.substring(0,30)} · ${fmt(e.amount)}</option>`).join('');
 }
 
-// Upload all pending files
+// Open upload modal — pre-select folder if we're inside one
+function openDocUploadModal(){
+  refreshFolderDropdown();
+  const sel=document.getElementById('doc-cat');
+  if(sel&&docFilt)sel.value=docFilt;
+  refreshDocExpDrop();
+  om('mo-upload-doc');
+}
+
+// Open manage folders modal
+const _openFoldersMo=window.om;
+document.addEventListener('click',e=>{
+  if(e.target.closest && e.target.closest('[onclick*="mo-folders"]')){
+    renderFolderList();
+  }
+});
+
+// Upload
 async function uploadDocs(){
   if(!pendingDocFiles.length){toast('Select at least one file','e');return;}
   const cat=document.getElementById('doc-cat').value;
@@ -1405,105 +1599,154 @@ async function uploadDocs(){
 
   const now=new Date().toISOString();
   const newDocs=pendingDocFiles.map(f=>({
-    id:uid(), name:f.name, type:f.type, size:f.size,
-    category:cat, linkedExpenseId:expLink, notes, uploadedAt:now, data:f.b64
+    id:uid(),name:f.name,type:f.type,size:f.size,
+    category:cat,linkedExpenseId:expLink,notes,uploadedAt:now,data:f.b64
   }));
 
-  // Save to Firestore docs collection (separate from ledger)
   if(fsConnected&&db){
     try{
       await Promise.all(newDocs.map(doc=>db.collection('docs').doc(doc.id).set(doc)));
       toast(`✓ ${newDocs.length} file${newDocs.length!==1?'s':''} uploaded to cloud`);
     }catch(e){
-      // Fallback: save locally if Firestore fails
       const ld=JSON.parse(localStorage.getItem('bl_docs')||'[]');
       localStorage.setItem('bl_docs',JSON.stringify([...ld,...newDocs]));
       toast('Saved locally (Firebase error: '+e.message+')','i');
     }
   } else {
-    // No Firebase — store in localStorage (limited but functional)
     const ld=JSON.parse(localStorage.getItem('bl_docs')||'[]');
     localStorage.setItem('bl_docs',JSON.stringify([...ld,...newDocs]));
     toast(`✓ ${newDocs.length} file${newDocs.length!==1?'s':''} saved locally`);
   }
 
   btn.textContent='⬆ Upload';btn.disabled=false;
-  cm('mo-upload-doc');clearDocUpload();
+  cm('mo-upload-doc');
+  clearDocUpload();
   document.getElementById('doc-notes').value='';
+  // Stay in the folder we uploaded to
+  docFilt=cat;
   renderDocs();
 }
 
-// Load docs from Firestore or localStorage
+// Docs cache — kept in sync by subscribeDocsCollection()
+let docsCache=null;
+let docsUnsubscribe=null;
+
+function subscribeDocsCollection(){
+  if(!db||!fsConnected)return;
+  if(docsUnsubscribe)docsUnsubscribe(); // clear previous listener
+  docsUnsubscribe=db.collection('docs').onSnapshot(snap=>{
+    docsCache=snap.docs.map(d=>d.data());
+    // Refresh docs view if currently open
+    const sec=document.getElementById('sec-documents');
+    if(sec&&sec.classList.contains('active'))renderDocs();
+  },err=>console.error('docs snapshot:',err));
+}
+
+// Load docs — from live cache (Firestore) or localStorage fallback
 async function loadDocs(){
   if(fsConnected&&db){
+    if(docsCache!==null)return docsCache; // use live cache
     try{
       const snap=await db.collection('docs').get();
-      return snap.docs.map(d=>d.data());
+      docsCache=snap.docs.map(d=>d.data());
+      return docsCache;
     }catch(e){console.error('loadDocs:',e);}
   }
   return JSON.parse(localStorage.getItem('bl_docs')||'[]');
 }
 
-// Filter
-function filtDocs(cat,el){
-  docFilt=cat;
-  document.querySelectorAll('.doc-cat-tab').forEach(t=>t.classList.remove('active'));
-  if(el)el.classList.add('active');
+// ── FOLDER NAVIGATION ──
+function openFolder(folderName){
+  docFilt=folderName;
   renderDocs();
 }
 
-// Render document grid
+// Render — either folder grid (root) or file grid (inside folder)
 async function renderDocs(){
-  const grid=document.getElementById('doc-grid');
-  if(!grid)return;
-  grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">Loading…</div>';
-  refreshDocExpDrop();
+  const folderGrid=document.getElementById('doc-folder-grid');
+  const fileGrid=document.getElementById('doc-grid');
+  const breadcrumb=document.getElementById('doc-breadcrumb');
+  if(!folderGrid||!fileGrid)return;
+
   const docs=await loadDocs();
-  const filtered=docFilt==='all'?docs:docs.filter(d=>d.category===docFilt);
-  filtered.sort((a,b)=>b.uploadedAt.localeCompare(a.uploadedAt));
 
-  if(!filtered.length){
-    grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ei">📁</div><p>No documents'+
-      (docFilt!=='all'?' in this category':' yet')+'</p>'+
-      (docFilt==='all'?'<small>Upload plans, approvals, bills and other construction files</small>':'')+
-      '</div>';
-    return;
+  if(docFilt===null){
+    // ── ROOT: show folder cards ──
+    breadcrumb.style.display='none';
+    folderGrid.style.display='grid';
+    fileGrid.style.display='none';
+    refreshDocExpDrop();
+
+    // Count files per folder
+    const counts={};
+    getFolders().forEach(f=>counts[f.name]=0);
+    docs.forEach(d=>{if(counts[d.category]!==undefined)counts[d.category]++;});
+
+    folderGrid.innerHTML=getFolders().map(folder=>`
+      <div class="folder-card" onclick="openFolder('${folder.name}')">
+        <div class="folder-icon">${folder.icon}</div>
+        <div class="folder-name">${folder.name}</div>
+        <div class="folder-count">${counts[folder.name]} file${counts[folder.name]!==1?'s':''}</div>
+      </div>`).join('');
+
+    // Total docs summary below folders
+    const total=docs.length;
+    const totalSize=docs.reduce((s,d)=>s+d.size,0);
+    const summary=document.createElement('div');
+    summary.style.cssText='grid-column:1/-1;font-size:13px;color:var(--muted);text-align:right;padding:4px 2px;font-family:IBM Plex Mono,monospace';
+    summary.textContent=total+' file'+(total!==1?'s':'')+' · '+fmtSize(totalSize)+' total';
+    folderGrid.appendChild(summary);
+
+  } else {
+    // ── FOLDER VIEW: show files inside ──
+    const folder=getFolders().find(f=>f.name===docFilt);
+    breadcrumb.style.display='flex';
+    document.getElementById('doc-breadcrumb-name').textContent=(folder?.icon||'📁')+' '+docFilt;
+    folderGrid.style.display='none';
+    fileGrid.style.display='grid';
+
+    const filtered=docs.filter(d=>d.category===docFilt);
+    filtered.sort((a,b)=>b.uploadedAt.localeCompare(a.uploadedAt));
+
+    if(!filtered.length){
+      fileGrid.innerHTML=`<div class="empty" style="grid-column:1/-1">
+        <div class="ei">${folder?.icon||'📁'}</div>
+        <p>No files in ${docFilt} yet</p>
+        <small>Click "＋ Upload Document" to add files to this folder</small>
+      </div>`;
+      return;
+    }
+
+    fileGrid.innerHTML=filtered.map(doc=>{
+      const linkedExp=doc.linkedExpenseId?S.expenses.find(e=>e.id===doc.linkedExpenseId):null;
+      const uploadDate=doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—';
+      return`<div class="doc-card">
+        <div class="doc-icon">${docIcon(doc.name)}</div>
+        <div class="doc-name">${doc.name}</div>
+        <div class="doc-meta">${fmtSize(doc.size)} · ${uploadDate}</div>
+        ${linkedExp?`<span class="doc-tag linked" style="width:fit-content" title="Linked to expense">🔗 ${linkedExp.desc.substring(0,20)}…</span>`:''}
+        ${doc.notes?`<div style="font-size:11px;color:var(--muted);font-style:italic;line-height:1.4">${doc.notes}</div>`:''}
+        <div class="doc-actions">
+          <button class="btn bs sm" style="flex:1" onclick="viewDoc('${doc.id}')">👁 View</button>
+          <button class="btn bgr sm" style="flex:1" onclick="downloadDoc('${doc.id}')">⬇</button>
+          <button class="btn bd sm" onclick="deleteDoc('${doc.id}')">×</button>
+        </div>
+      </div>`;
+    }).join('');
   }
-
-  grid.innerHTML=filtered.map(doc=>{
-    const linkedExp=doc.linkedExpenseId?S.expenses.find(e=>e.id===doc.linkedExpenseId):null;
-    const uploadDate=doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—';
-    return`<div class="doc-card">
-      <div class="doc-icon">${docIcon(doc.name)}</div>
-      <div class="doc-name">${doc.name}</div>
-      <div class="doc-meta">${fmtSize(doc.size)} · ${uploadDate}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:2px">
-        <span class="doc-tag">${doc.category}</span>
-        ${linkedExp?`<span class="doc-tag linked" title="Linked to expense">🔗 ${linkedExp.desc.substring(0,18)}…</span>`:''}
-      </div>
-      ${doc.notes?`<div style="font-size:11px;color:var(--muted);font-style:italic;line-height:1.4">${doc.notes}</div>`:''}
-      <div class="doc-actions">
-        <button class="btn bs sm" style="flex:1" onclick="viewDoc('${doc.id}')">👁 View</button>
-        <button class="btn bgr sm" style="flex:1" onclick="downloadDoc('${doc.id}')">⬇</button>
-        <button class="btn bd sm" onclick="deleteDoc('${doc.id}')">×</button>
-      </div>
-    </div>`;
-  }).join('');
 }
 
-// View a document in the modal
+// View document
 async function viewDoc(id){
   const docs=await loadDocs();
   const doc=docs.find(d=>d.id===id);
   if(!doc)return;
   document.getElementById('view-doc-title').textContent=doc.name;
   document.getElementById('view-doc-meta').textContent=
-    `${doc.category} · ${fmtSize(doc.size)} · Uploaded ${new Date(doc.uploadedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}${doc.notes?' · '+doc.notes:''}`;
+    `${doc.category} · ${fmtSize(doc.size)} · ${new Date(doc.uploadedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}${doc.notes?' · '+doc.notes:''}`;
   const body=document.getElementById('view-doc-body');
-  const dlBtn=document.getElementById('view-doc-dl');
-  dlBtn.onclick=()=>downloadDoc(id);
-
-  if(doc.type&&doc.type.startsWith('image/')){
+  document.getElementById('view-doc-dl').onclick=()=>downloadDoc(id);
+  if(isImage(doc.type)){
     body.innerHTML=`<img src="${doc.data}" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:8px"/>`;
   } else if(doc.type==='application/pdf'){
     body.innerHTML=`<iframe src="${doc.data}" style="width:100%;height:60vh;border:none;border-radius:8px"></iframe>`;
@@ -1511,54 +1754,92 @@ async function viewDoc(id){
     body.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted)">
       <div style="font-size:48px;margin-bottom:12px">${docIcon(doc.name)}</div>
       <div style="font-size:15px;font-weight:600;color:var(--ink)">${doc.name}</div>
-      <div style="font-size:13px;margin-top:8px">This file type cannot be previewed. Click Download to open it.</div>
+      <div style="font-size:13px;margin-top:8px">Preview not available — click Download to open.</div>
     </div>`;
   }
   om('mo-view-doc');
 }
 
-// Download single doc
+// Download single
 async function downloadDoc(id){
   const docs=await loadDocs();
   const doc=docs.find(d=>d.id===id);
   if(!doc)return;
-  const a=document.createElement('a');
-  a.href=doc.data;
-  a.download=doc.name;
-  a.click();
+  const a=document.createElement('a');a.href=doc.data;a.download=doc.name;a.click();
   toast('Downloading '+doc.name+'…');
 }
 
-// Download ALL docs — category folders via zip-like naming
-async function downloadAllDocs(){
+// Download all files in current folder
+async function downloadFolderDocs(){
+  if(!docFilt){toast('Open a folder first','e');return;}
   const docs=await loadDocs();
-  const filtered=docFilt==='all'?docs:docs.filter(d=>d.category===docFilt);
-  if(!filtered.length){toast('No documents to download','e');return;}
-  // Download one by one with a small delay (browser allows sequential)
+  const filtered=docs.filter(d=>d.category===docFilt);
+  if(!filtered.length){toast('No files in this folder','e');return;}
   toast(`Downloading ${filtered.length} file${filtered.length!==1?'s':''}…`,'i');
   for(let i=0;i<filtered.length;i++){
-    const doc=filtered[i];
-    await new Promise(res=>setTimeout(res,400));
-    const a=document.createElement('a');
-    a.href=doc.data;
-    // Prefix filename with category so files group together when sorted
-    a.download=`[${doc.category}] ${doc.name}`;
-    a.click();
+    await new Promise(r=>setTimeout(r,380));
+    const a=document.createElement('a');a.href=filtered[i].data;a.download=filtered[i].name;a.click();
   }
-  toast(`✓ All ${filtered.length} files downloaded`);
+  toast(`✓ ${filtered.length} files downloaded`);
 }
 
-// Delete a document
+// Download ALL files across ALL folders
+async function downloadAllFolders(){
+  const docs=await loadDocs();
+  if(!docs.length){toast('No documents to download','e');return;}
+  toast(`Downloading all ${docs.length} file${docs.length!==1?'s':''}…`,'i');
+  // Sort by category so folder grouping is clear in downloads
+  const sorted=[...docs].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name));
+  for(let i=0;i<sorted.length;i++){
+    await new Promise(r=>setTimeout(r,380));
+    const a=document.createElement('a');
+    a.href=sorted[i].data;
+    // Prefix with [FolderName] so files group when sorted in Downloads folder
+    a.download=`[${sorted[i].category}] ${sorted[i].name}`;
+    a.click();
+  }
+  toast(`✓ All ${sorted.length} files downloaded`);
+}
+
+// Delete document
 async function deleteDoc(id){
   if(!confirm('Delete this document? This cannot be undone.'))return;
   if(fsConnected&&db){
     try{await db.collection('docs').doc(id).delete();}
     catch(e){console.error(e);}
   }
-  // Also remove from localStorage
   const ld=JSON.parse(localStorage.getItem('bl_docs')||'[]');
   localStorage.setItem('bl_docs',JSON.stringify(ld.filter(d=>d.id!==id)));
   toast('Document deleted');renderDocs();
+}
+
+
+// ━━━ COLLAPSIBLE ADD FORMS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function toggleAddForm(formId, btn){
+  const form=document.getElementById(formId);
+  if(!form)return;
+  const opening=form.style.display==='none';
+  form.style.display=opening?'block':'none';
+  if(btn){btn.textContent=opening?'✕ Close':'＋ '+(formId.includes('src')?'Add Source':'Add Expense');}
+  if(opening){
+    // Pre-fill today's date
+    const today=new Date().toISOString().split('T')[0];
+    if(formId.includes('src')){const d=document.getElementById('src-date');if(d&&!d.value)d.value=today;}
+    if(formId.includes('exp')){const d=document.getElementById('exp-date');if(d&&!d.value)d.value=today;}
+    setTimeout(()=>form.querySelector('input')?.focus(),50);
+  }
+}
+
+// Auto-close add form after successful add
+function closeAddForms(){
+  const sf=document.getElementById('add-src-form');
+  const ef=document.getElementById('add-exp-form');
+  const sb=document.getElementById('btn-add-src');
+  const eb=document.getElementById('btn-add-exp');
+  if(sf){sf.style.display='none';}
+  if(sb){sb.textContent='＋ Add Source';}
+  if(ef){ef.style.display='none';}
+  if(eb){eb.textContent='＋ Add Expense';}
 }
 
 // ━━━ MOBILE SIDEBAR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
