@@ -259,7 +259,8 @@ tbody td:first-child{color:var(--ink);font-weight:500}
       <span class="dl" id="dlabel">Firebase: offline</span>
     </div>
     <button class="btn bs sm" id="sync-btn" onclick="fsPull()" style="width:100%;margin-bottom:8px;justify-content:center;display:none">⟳ Sync Now</button>
-    <div class="sbver">v2.1 · <span id="last-sync-sb">—</span></div>
+    <button class="btn bs sm" id="backup-btn" onclick="triggerDriveBackup(true)" style="width:100%;margin-bottom:8px;justify-content:center;display:none" title="Backup to Google Drive">☁️ Backup to Drive</button>
+    <div class="sbver">v2.2 · <span id="last-sync-sb">—</span> · backup: <span id="last-backup-sb">never</span></div>
   </div>
 </aside>
 
@@ -660,6 +661,32 @@ service cloud.firestore {
   </div>
 </div>
 
+
+<!-- DRIVE BACKUP MODAL -->
+<div class="mo" id="mo-backup">
+  <div class="modal">
+    <h3>☁️ Google Drive Backup</h3>
+    <p class="msub">Daily automatic backup of your financial data to Google Drive</p>
+    <div id="backup-status-area">
+      <div class="info-box">
+        Backups are saved to a <strong>BuildLedger Backups</strong> folder in your Google Drive.<br>
+        Each backup contains:<br>
+        · <strong>BuildLedger_YYYY-MM-DD.xls</strong> — Full Excel export (expenses, sources, documents index)<br>
+        · <strong>BuildLedger_YYYY-MM-DD.json</strong> — Raw data backup (can restore from this)
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:13px;margin-bottom:16px">
+        <div style="font-weight:600;color:var(--ink2);margin-bottom:8px">Backup Schedule</div>
+        <div style="color:var(--muted)">Last backup: <span id="last-backup-time" style="color:var(--ink);font-weight:600">Never</span></div>
+        <div style="color:var(--muted);margin-top:4px">Auto-backup runs daily when app is open with Drive connected</div>
+      </div>
+    </div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-backup')">Close</button>
+      <button class="btn bp" id="run-backup-btn" onclick="triggerDriveBackup(true)">⬆ Backup Now</button>
+    </div>
+  </div>
+</div>
+
 <div class="mo" id="mo-del">
   <div class="modal">
     <h3>Confirm Delete</h3><p id="del-msg" style="color:var(--muted);margin-top:8px;font-size:14px">Are you sure?</p>
@@ -690,9 +717,10 @@ service cloud.firestore {
         <div class="mono" style="font-size:11px;color:var(--muted);background:var(--bg2);padding:8px;border-radius:6px;margin-bottom:8px;word-break:break-all" id="share-url-display"></div>
         <button class="btn bs sm" onclick="copyShareLink()">Copy Link</button>
       </div>
-      <div style="margin-top:16px;font-size:13px;color:var(--muted)">Last synced: <span id="last-sync">never</span></div>
+      <div style="margin-top:16px;font-size:13px;color:var(--muted)">Last synced: <span id="last-sync">never</span> · Backup: <span id="last-backup-modal">never</span></div>
       <div class="flex gap2" style="flex-wrap:wrap;margin-top:12px">
         <button class="btn bgr" onclick="fsPull()">⬇ Pull Latest</button>
+        <button class="btn bbl" onclick="triggerDriveBackup(true)">☁️ Backup to Drive</button>
         <button class="btn bd" onclick="disconnectFirebase()">Disconnect</button>
       </div>
     </div>
@@ -988,8 +1016,8 @@ function exportCSV(){
   toast('CSV exported with receipt history!');
 }
 
-function exportXLSX(){
-  // Build a full Excel-compatible workbook as XML (SpreadsheetML) — opens natively in Excel
+// Shared builder — used by both exportXLSX() and Drive backup
+function buildXLSContent(docs){
   const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const cell=(v,t='String')=>t==='Number'?`<Cell><Data ss:Type="Number">${v}</Data></Cell>`:`<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
   const hdr=v=>`<Cell ss:StyleID="hdr"><Data ss:Type="String">${esc(v)}</Data></Cell>`;
@@ -1003,46 +1031,58 @@ function exportXLSX(){
     expRows.push(row([cell(fd(e.date)),cell(cat?.name||''),cell(e.desc),cell(src?.name||''),cell(e.amount,'Number'),cell(e.notes||'')]));
   });
   const totalAmt=S.expenses.reduce((s,e)=>s+e.amount,0);
-  expRows.push(row([cell(''),cell(''),cell(''),cell('TOTAL',),cell(totalAmt,'Number'),cell('')]));
+  expRows.push(row([cell(''),cell(''),cell(''),cell('TOTAL'),cell(totalAmt,'Number'),cell('')]));
 
   // Sheet 2: Sources with tranche breakdown
   const srcRows=[row([hdr('Source'),hdr('Type'),hdr('Total Sanctioned (₹)'),hdr('Total Received (₹)'),hdr('Spent (₹)'),hdr('Available (₹)'),hdr('Yet to Draw (₹)'),hdr('Tranche #'),hdr('Tranche Date'),hdr('Tranche Amount (₹)'),hdr('Tranche Notes')])];
   S.sources.forEach(src=>{
     const sp=srcSpent(src.id);
     const hist=src.history||[];
-    if(hist.length===0){
-      // No tranches recorded
+    if(!hist.length){
       srcRows.push(row([cell(src.name),cell(src.type),cell(src.total,'Number'),cell(src.recv,'Number'),cell(sp,'Number'),cell(src.recv-sp,'Number'),cell(src.total-src.recv,'Number'),cell('—'),cell('—'),cell('—'),cell('No receipt entries')]));
     } else {
       hist.forEach((h,i)=>{
         srcRows.push(row([
-          cell(i===0?src.name:''),
-          cell(i===0?src.type:''),
+          cell(i===0?src.name:''), cell(i===0?src.type:''),
           i===0?cell(src.total,'Number'):cell(''),
           i===0?cell(src.recv,'Number'):cell(''),
           i===0?cell(sp,'Number'):cell(''),
           i===0?cell(src.recv-sp,'Number'):cell(''),
           i===0?cell(src.total-src.recv,'Number'):cell(''),
-          cell(String(i+1)),
-          cell(fd(h.date)||'—'),
-          cell(h.amount,'Number'),
-          cell(h.notes||'')
+          cell(String(i+1)), cell(fd(h.date)||'—'),
+          cell(h.amount,'Number'), cell(h.notes||'')
         ]));
       });
     }
-    // Blank separator row between sources
     srcRows.push(row([cell('')]));
   });
 
   // Sheet 3: Category Summary
-  const catTotals={};S.categories.forEach(c=>catTotals[c.id]=0);S.expenses.forEach(e=>{if(catTotals[e.category]!==undefined)catTotals[e.category]+=e.amount;});
+  const catTotals={};
+  S.categories.forEach(c=>catTotals[c.id]=0);
+  S.expenses.forEach(e=>{if(catTotals[e.category]!==undefined)catTotals[e.category]+=e.amount;});
   const catRows=[row([hdr('Category'),hdr('Total Spent (₹)'),hdr('% of Total')])];
   const grandTotal=S.expenses.reduce((s,e)=>s+e.amount,0)||1;
   S.categories.filter(c=>catTotals[c.id]>0).sort((a,b)=>catTotals[b.id]-catTotals[a.id]).forEach(c=>{
     catRows.push(row([cell(c.name),cell(catTotals[c.id],'Number'),cell(Math.round(catTotals[c.id]/grandTotal*100)+'%')]));
   });
 
-  const xl=`<?xml version="1.0" encoding="UTF-8"?>
+  // Sheet 4: Document index (no file data — just metadata)
+  const docRows=[row([hdr('File Name'),hdr('Folder'),hdr('Size'),hdr('Uploaded'),hdr('Notes'),hdr('Linked Expense')])];
+  if(docs&&docs.length){
+    docs.forEach(d=>{
+      const exp=d.linkedExpenseId?S.expenses.find(e=>e.id===d.linkedExpenseId):null;
+      docRows.push(row([
+        cell(d.name), cell(d.category), cell(fmtSize(d.size)),
+        cell(d.uploadedAt?new Date(d.uploadedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'),
+        cell(d.notes||''), cell(exp?exp.desc:'')
+      ]));
+    });
+  } else {
+    docRows.push(row([cell('No documents uploaded yet'),cell(''),cell(''),cell(''),cell(''),cell('')]));
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
@@ -1053,11 +1093,18 @@ function exportXLSX(){
 <Worksheet ss:Name="Expenses"><Table>${expRows.join('')}</Table></Worksheet>
 <Worksheet ss:Name="Sources"><Table>${srcRows.join('')}</Table></Worksheet>
 <Worksheet ss:Name="Category Summary"><Table>${catRows.join('')}</Table></Worksheet>
+<Worksheet ss:Name="Documents Index"><Table>${docRows.join('')}</Table></Worksheet>
 </Workbook>`;
+}
+
+async function exportXLSX(){
+  const docs=await loadDocs()||[];
+  const xl=buildXLSContent(docs);
   const a=document.createElement('a');
   a.href='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(xl);
   a.download='BuildLedger_'+new Date().toISOString().split('T')[0]+'.xls';
-  a.click();toast('✓ Excel file downloaded!');
+  a.click();
+  toast('✓ Excel downloaded (4 sheets incl. Documents Index)');
 }
 
 // ━━━ BULK IMPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1213,6 +1260,9 @@ function openDriveModal(){
 function connectFirebase(){
   const customId=document.getElementById('fs-doc-id').value.trim();
   if(customId)fsDocId=customId;
+  // Save for backup use
+  const cid=document.getElementById('fs-cid')?.value?.trim()||localStorage.getItem('bl_drive_backup_cid')||'';
+  if(cid){localStorage.setItem('bl_drive_backup_cid',cid);driveBackupClientId=cid;}
   setDot('sync');
   if(typeof firebase==='undefined'){
     toast('Loading Firebase…','i');
@@ -1320,6 +1370,10 @@ function syncTimestamp(){
   const t=new Date().toLocaleTimeString('en-IN');
   const a=document.getElementById('last-sync');const b=document.getElementById('last-sync-sb');
   if(a)a.textContent=t;if(b)b.textContent=t;
+  // Also update backup label
+  const lb=localStorage.getItem('bl_last_backup');
+  const lbm=document.getElementById('last-backup-modal');
+  if(lbm)lbm.textContent=lb||'never';
 }
 
 function updDrvUI(on){
@@ -1328,6 +1382,8 @@ function updDrvUI(on){
   document.getElementById('fs-dis').style.display=on?'none':'';
   document.getElementById('fs-con').style.display=on?'':'none';
   document.getElementById('sync-btn').style.display=on?'':'none';
+  const bkBtn=document.getElementById('backup-btn');if(bkBtn)bkBtn.style.display=on?'':'none';
+  if(on){const cid=localStorage.getItem('bl_drive_backup_cid')||'';if(cid){driveBackupClientId=cid;checkAutoBackup();}}
   if(on){const u=document.getElementById('share-url-display');if(u)u.textContent=window.location.href;}
 }
 
@@ -1909,6 +1965,189 @@ async function deleteDoc(id){
   toast('Document deleted');renderDocs();
 }
 
+
+
+// ━━━ GOOGLE DRIVE DAILY BACKUP ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Uses Google Drive REST API with OAuth2 token
+// Saves XLS + JSON to "BuildLedger Backups" folder in Drive
+let driveBackupToken = null;
+let driveBackupClientId = '';
+let driveBackupFolderId = null;
+const BACKUP_FOLDER_NAME = 'BuildLedger Backups';
+
+function initDriveBackup(clientId){
+  driveBackupClientId = clientId;
+  // Show backup button in sidebar
+  const btn = document.getElementById('backup-btn');
+  if(btn) btn.style.display = '';
+  // Check if we should auto-backup today
+  checkAutoBackup();
+}
+
+function checkAutoBackup(){
+  const lastBackup = localStorage.getItem('bl_last_backup');
+  const today = new Date().toISOString().split('T')[0];
+  if(lastBackup !== today){
+    // Schedule for 10 seconds after page load to not interfere with data load
+    setTimeout(()=>triggerDriveBackup(false), 10000);
+  }
+  // Update UI
+  updateBackupUI();
+}
+
+function updateBackupUI(){
+  const last = localStorage.getItem('bl_last_backup');
+  const el1 = document.getElementById('last-backup-time');
+  const el2 = document.getElementById('last-backup-sb');
+  const display = last || 'Never';
+  if(el1) el1.textContent = display;
+  if(el2) el2.textContent = last ? last : 'never';
+}
+
+async function triggerDriveBackup(manual){
+  if(!driveBackupClientId){
+    // Need to configure — prompt for client ID if not set
+    const cid = localStorage.getItem('bl_drive_backup_cid') || '';
+    if(!cid){
+      if(manual) om('mo-drive'); // Redirect to Firebase modal which has cid field
+      return;
+    }
+    driveBackupClientId = cid;
+  }
+  if(manual) om('mo-backup');
+  const runBtn = document.getElementById('run-backup-btn');
+  if(runBtn){ runBtn.textContent = '⏳ Running backup…'; runBtn.disabled = true; }
+  setBackupStatus('Authenticating with Google Drive…');
+
+  try {
+    await getBackupToken();
+    setBackupStatus('Creating backup folder…');
+    await ensureBackupFolder();
+    setBackupStatus('Building Excel file…');
+    const docs = await loadDocs() || [];
+    const xlContent = buildXLSContent(docs);
+    const today = new Date().toISOString().split('T')[0];
+    setBackupStatus('Uploading Excel backup…');
+    await uploadFileToDrive(
+      'BuildLedger_' + today + '.xls',
+      xlContent,
+      'application/vnd.ms-excel'
+    );
+    setBackupStatus('Uploading JSON backup…');
+    const jsonContent = JSON.stringify({
+      exportedAt: new Date().toISOString(),
+      data: S,
+      docsIndex: (docs||[]).map(d=>({id:d.id,name:d.name,category:d.category,size:d.size,uploadedAt:d.uploadedAt,notes:d.notes}))
+    }, null, 2);
+    await uploadFileToDrive(
+      'BuildLedger_' + today + '.json',
+      jsonContent,
+      'application/json'
+    );
+    localStorage.setItem('bl_last_backup', today);
+    updateBackupUI();
+    setBackupStatus('✅ Backup complete! Files saved to "' + BACKUP_FOLDER_NAME + '" in your Google Drive.');
+    if(!manual) toast('☁️ Daily backup saved to Drive', 'i');
+    else toast('✓ Backup complete!');
+  } catch(err) {
+    console.error('Backup error:', err);
+    const msg = err.message || 'Unknown error';
+    setBackupStatus('❌ Backup failed: ' + msg + (msg.includes('popup')?'. Allow popups for this site.':''));
+    if(manual) toast('Backup failed: ' + msg, 'e');
+  }
+  if(runBtn){ runBtn.textContent = '⬆ Backup Now'; runBtn.disabled = false; }
+}
+
+function setBackupStatus(msg){
+  const el = document.getElementById('backup-status-area');
+  if(!el) return;
+  // Find or create status line
+  let statusEl = document.getElementById('backup-live-status');
+  if(!statusEl){
+    statusEl = document.createElement('div');
+    statusEl.id = 'backup-live-status';
+    statusEl.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:13px;margin-top:10px;color:var(--ink2);font-family:"IBM Plex Mono",monospace';
+    el.appendChild(statusEl);
+  }
+  statusEl.textContent = msg;
+}
+
+async function getBackupToken(){
+  return new Promise((resolve, reject)=>{
+    if(driveBackupToken){ resolve(driveBackupToken); return; }
+    // Load GIS if needed
+    const doAuth = ()=>{
+      const tc = google.accounts.oauth2.initTokenClient({
+        client_id: driveBackupClientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: resp => {
+          if(resp.error){ reject(new Error('Auth failed: ' + resp.error)); return; }
+          driveBackupToken = resp.access_token;
+          resolve(driveBackupToken);
+        }
+      });
+      tc.requestAccessToken({ prompt: driveBackupToken ? '' : 'consent' });
+    };
+    if(typeof google !== 'undefined' && google.accounts){ doAuth(); return; }
+    const sc = document.createElement('script');
+    sc.src = 'https://accounts.google.com/gsi/client';
+    sc.onload = doAuth;
+    sc.onerror = ()=>reject(new Error('Failed to load Google auth script'));
+    document.head.appendChild(sc);
+  });
+}
+
+async function ensureBackupFolder(){
+  // Search for existing folder
+  const searchRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name='${BACKUP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
+    { headers: { Authorization: 'Bearer ' + driveBackupToken } }
+  );
+  const searchData = await searchRes.json();
+  if(searchData.files && searchData.files.length > 0){
+    driveBackupFolderId = searchData.files[0].id;
+    return;
+  }
+  // Create folder
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + driveBackupToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: BACKUP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  const folderData = await createRes.json();
+  driveBackupFolderId = folderData.id;
+}
+
+async function uploadFileToDrive(filename, content, mimeType){
+  // Check if file with same name exists today (overwrite if so)
+  const searchRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name='${filename}' and '${driveBackupFolderId}' in parents and trashed=false&fields=files(id)`,
+    { headers: { Authorization: 'Bearer ' + driveBackupToken } }
+  );
+  const searchData = await searchRes.json();
+  const existingId = searchData.files && searchData.files.length ? searchData.files[0].id : null;
+
+  const blob = new Blob([content], { type: mimeType });
+  const meta = JSON.stringify({ name: filename, parents: existingId ? undefined : [driveBackupFolderId] });
+  const form = new FormData();
+  form.append('metadata', new Blob([meta], { type: 'application/json' }));
+  form.append('file', blob);
+
+  const url = existingId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+  const method = existingId ? 'PATCH' : 'POST';
+
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: 'Bearer ' + driveBackupToken },
+    body: form
+  });
+  if(!res.ok){
+    const err = await res.json();
+    throw new Error(err.error?.message || 'Upload failed');
+  }
+}
 
 // ━━━ COLLAPSIBLE ADD FORMS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function toggleAddForm(formId, btn){
