@@ -1210,25 +1210,23 @@ function initFirestore(){
     db=firebase.firestore();
     fsConnected=true;
     localStorage.setItem('bl_fsDocId',fsDocId);
-    // FIX: Always pull cloud first. Only write if cloud doc doesn't exist yet.
-    // This prevents a fresh device from overwriting existing data with zeros.
+    // Start both subscriptions immediately — they fire as soon as data arrives
+    fsSubscribe();
+    subscribeDocsCollection(); // <-- starts listening to docs right away
+    updDrvUI(true);
+    cm('mo-drive');
+    // Pull ledger: if cloud has data load it; if empty push local up
     db.collection('ledger').doc(fsDocId).get().then(doc=>{
       if(doc.exists){
-        // Cloud has data — pull it, don't push local (which may be empty)
         const remote=doc.data();
         S=remote;
         localStorage.setItem('bl2',JSON.stringify(S));
         renderDash();refreshDrops();renderCats();
         syncTimestamp();
-        toast('✓ Connected! Data loaded from cloud.');
+        toast('✓ Connected! Data syncing…');
       } else {
-        // Cloud is empty — this is the first-ever save, push local data up
         fsWrite().then(()=>toast('✓ Connected! Data saved to cloud.'));
       }
-      // Subscribe to live updates regardless
-      fsSubscribe();
-      updDrvUI(true);
-      cm('mo-drive');
     }).catch(e=>{setDot('');toast('Firebase connect error: '+e.message,'e');console.error(e);});
   }catch(e){setDot('');toast('Firebase error: '+e.message,'e');console.error(e);}
 }
@@ -1275,6 +1273,8 @@ function fsPull(){
 function disconnectFirebase(){
   if(!confirm('Disconnect from Firebase? Local data stays safe.'))return;
   if(fsUnsubscribe)fsUnsubscribe();
+  if(docsUnsubscribe)docsUnsubscribe();
+  docsCache=null; // reset cache on disconnect
   fsConnected=false;db=null;
   localStorage.removeItem('bl_fsDocId');
   updDrvUI(false);cm('mo-drive');toast('Disconnected from Firebase');
@@ -1633,24 +1633,30 @@ let docsUnsubscribe=null;
 
 function subscribeDocsCollection(){
   if(!db||!fsConnected)return;
-  if(docsUnsubscribe)docsUnsubscribe(); // clear previous listener
+  if(docsUnsubscribe)docsUnsubscribe();
   docsUnsubscribe=db.collection('docs').onSnapshot(snap=>{
+    // Always update cache — even if empty (docsCache=[] means "loaded, no files")
     docsCache=snap.docs.map(d=>d.data());
-    // Refresh docs view if currently open
+    // Always re-render docs if the section is currently open
     const sec=document.getElementById('sec-documents');
-    if(sec&&sec.classList.contains('active'))renderDocs();
-  },err=>console.error('docs snapshot:',err));
+    if(sec&&sec.classList.contains('active')){
+      renderDocs();
+    }
+  },err=>{
+    console.error('docs snapshot error:',err);
+    // On error, fall back to localStorage so UI isn't stuck
+    docsCache=JSON.parse(localStorage.getItem('bl_docs')||'[]');
+  });
 }
 
-// Load docs — from live cache (Firestore) or localStorage fallback
+// Load docs — returns live Firestore cache or localStorage fallback.
+// docsCache is kept current by subscribeDocsCollection() snapshot listener.
+// null means "subscription hasn't fired yet" — renderDocs shows loading.
 async function loadDocs(){
   if(fsConnected&&db){
-    if(docsCache!==null)return docsCache; // use live cache
-    try{
-      const snap=await db.collection('docs').get();
-      docsCache=snap.docs.map(d=>d.data());
-      return docsCache;
-    }catch(e){console.error('loadDocs:',e);}
+    if(docsCache!==null)return docsCache;
+    // Cache not ready yet — subscription is in-flight, return null to show loading
+    return null;
   }
   return JSON.parse(localStorage.getItem('bl_docs')||'[]');
 }
@@ -1669,6 +1675,19 @@ async function renderDocs(){
   if(!folderGrid||!fileGrid)return;
 
   const docs=await loadDocs();
+
+  // null means subscription hasn't fired yet — show spinner and wait
+  if(docs===null){
+    folderGrid.style.display='grid';
+    fileGrid.style.display='none';
+    if(breadcrumb)breadcrumb.style.display='none';
+    folderGrid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:12px;animation:pulse 1.2s infinite">☁️</div>
+      <div style="font-size:14px;font-weight:600">Loading from cloud…</div>
+      <div style="font-size:12px;margin-top:6px">Waiting for Firebase sync</div>
+    </div>`;
+    return; // snapshot will fire and call renderDocs() again when ready
+  }
 
   if(docFilt===null){
     // ── ROOT: show folder cards ──
@@ -1870,7 +1889,7 @@ function init(){
   const savedDocId=localStorage.getItem('bl_fsDocId');
   if(savedDocId){
     fsDocId=savedDocId;
-    toast('Reconnecting to Firebase…','i');
+    // Silent reconnect — no toast, just reconnect
     if(typeof firebase!=='undefined'){initFirestore();}
     else{loadFirebaseScripts(()=>initFirestore());}
   }
