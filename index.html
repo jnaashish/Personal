@@ -712,15 +712,26 @@ service cloud.firestore {
     </div>
     <div id="fs-con" style="display:none">
       <div class="info-box">✅ Connected to Firebase! Data syncs live across all devices. Anyone visiting <strong>your GitHub Pages link</strong> sees the same data in real-time.</div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px">
         <div style="font-weight:600;margin-bottom:4px;color:var(--ink2)">🔗 Share this link</div>
         <div class="mono" style="font-size:11px;color:var(--muted);background:var(--bg2);padding:8px;border-radius:6px;margin-bottom:8px;word-break:break-all" id="share-url-display"></div>
         <button class="btn bs sm" onclick="copyShareLink()">Copy Link</button>
       </div>
-      <div style="margin-top:16px;font-size:13px;color:var(--muted)">Last synced: <span id="last-sync">never</span> · Backup: <span id="last-backup-modal">never</span></div>
-      <div class="flex gap2" style="flex-wrap:wrap;margin-top:12px">
+      <!-- Drive Backup config -->
+      <div style="background:var(--accent2-light);border:1px solid #aac0e8;border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px">
+        <div style="font-weight:600;margin-bottom:6px;color:var(--accent2)">☁️ Daily Google Drive Backup</div>
+        <p style="color:var(--ink2);margin-bottom:10px;font-size:12px">Enter your Google OAuth Client ID to enable daily backups (XLS + JSON) saved to a <strong>BuildLedger Backups</strong> folder in Drive.</p>
+        <input id="backup-client-id" placeholder="OAuth Client ID (…apps.googleusercontent.com)" 
+          style="width:100%;background:var(--surface);border:1.5px solid #aac0e8;border-radius:8px;padding:9px 12px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink);outline:none;margin-bottom:8px"/>
+        <div class="flex gap2">
+          <button class="btn bbl sm" onclick="saveBackupConfig()">💾 Save &amp; Enable</button>
+          <button class="btn bp sm" onclick="triggerDriveBackup(true)" id="run-backup-now-btn">⬆ Backup Now</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">Last backup: <strong id="last-backup-modal">never</strong></div>
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Last synced: <span id="last-sync">never</span></div>
+      <div class="flex gap2" style="flex-wrap:wrap">
         <button class="btn bgr" onclick="fsPull()">⬇ Pull Latest</button>
-        <button class="btn bbl" onclick="triggerDriveBackup(true)">☁️ Backup to Drive</button>
         <button class="btn bd" onclick="disconnectFirebase()">Disconnect</button>
       </div>
     </div>
@@ -1253,16 +1264,41 @@ function openDriveModal(){
   if(fsConnected){
     const u=document.getElementById('share-url-display');
     if(u)u.textContent=window.location.href;
+    // Populate backup client ID if saved
+    const savedCid=localStorage.getItem('bl_drive_backup_cid')||'';
+    const cidInput=document.getElementById('backup-client-id');
+    if(cidInput&&savedCid&&!cidInput.value)cidInput.value=savedCid;
+    // Update last backup display
+    const lb=localStorage.getItem('bl_last_backup')||'never';
+    const lbEl=document.getElementById('last-backup-modal');
+    if(lbEl)lbEl.textContent=lb;
   }
   om('mo-drive');
+}
+
+function saveBackupConfig(){
+  const cid=(document.getElementById('backup-client-id')?.value||'').trim();
+  if(!cid){toast('Enter your OAuth Client ID first','e');return;}
+  if(!cid.includes('googleusercontent.com')){
+    toast('That doesn't look like a valid Client ID (should end in .googleusercontent.com)','e');
+    return;
+  }
+  localStorage.setItem('bl_drive_backup_cid',cid);
+  driveBackupClientId=cid;
+  toast('✓ Backup config saved! Running first backup…');
+  triggerDriveBackup(false).then(()=>{
+    checkAutoBackup();
+    const btn=document.getElementById('backup-btn');
+    if(btn)btn.style.display='';
+  });
 }
 
 function connectFirebase(){
   const customId=document.getElementById('fs-doc-id').value.trim();
   if(customId)fsDocId=customId;
-  // Save for backup use
-  const cid=document.getElementById('fs-cid')?.value?.trim()||localStorage.getItem('bl_drive_backup_cid')||'';
-  if(cid){localStorage.setItem('bl_drive_backup_cid',cid);driveBackupClientId=cid;}
+  // Restore backup client ID if previously saved
+  const savedCid=localStorage.getItem('bl_drive_backup_cid')||'';
+  if(savedCid&&!driveBackupClientId)driveBackupClientId=savedCid;
   setDot('sync');
   if(typeof firebase==='undefined'){
     toast('Loading Firebase…','i');
@@ -1292,24 +1328,48 @@ function initFirestore(){
     db=firebase.firestore();
     fsConnected=true;
     localStorage.setItem('bl_fsDocId',fsDocId);
-    // Start both subscriptions immediately — they fire as soon as data arrives
-    fsSubscribe();
-    subscribeDocsCollection(); // <-- starts listening to docs right away
     updDrvUI(true);
     cm('mo-drive');
-    // Pull ledger: if cloud has data load it; if empty push local up
+    // SAFE ORDER: read cloud FIRST, then start subscriptions.
+    // Starting subscriptions before reading caused a race where an empty
+    // local S could be pushed to cloud before remote data was loaded.
+    setDot('sync');
     db.collection('ledger').doc(fsDocId).get().then(doc=>{
       if(doc.exists){
+        // Cloud has data — always load from cloud (never push local over it)
         const remote=doc.data();
-        S=remote;
-        localStorage.setItem('bl2',JSON.stringify(S));
+        // Safety check: only use cloud data if it has real content
+        const hasRealData=remote&&(
+          (remote.sources&&remote.sources.length>0)||
+          (remote.expenses&&remote.expenses.length>0)
+        );
+        if(hasRealData){
+          S=remote;
+          localStorage.setItem('bl2',JSON.stringify(S));
+        }
+        // If cloud data is empty but local has data, push local up
+        if(!hasRealData&&(S.sources.length>0||S.expenses.length>0)){
+          fsWrite();
+        }
         renderDash();refreshDrops();renderCats();
         syncTimestamp();
-        toast('✓ Connected! Data syncing…');
+        toast('✓ Connected! Data loaded.');
       } else {
-        fsWrite().then(()=>toast('✓ Connected! Data saved to cloud.'));
+        // No cloud doc yet — push whatever local data we have
+        fsWrite().then(()=>toast('✓ Connected! Local data saved to cloud.'));
       }
-    }).catch(e=>{setDot('');toast('Firebase connect error: '+e.message,'e');console.error(e);});
+      // Start subscriptions AFTER initial load is done
+      fsSubscribe();
+      subscribeDocsCollection();
+      setDot('on');
+    }).catch(e=>{
+      setDot('');
+      toast('Firebase connect error: '+e.message,'e');
+      console.error(e);
+      // Start subscriptions anyway so app stays functional
+      fsSubscribe();
+      subscribeDocsCollection();
+    });
   }catch(e){setDot('');toast('Firebase error: '+e.message,'e');console.error(e);}
 }
 
@@ -1382,8 +1442,10 @@ function updDrvUI(on){
   document.getElementById('fs-dis').style.display=on?'none':'';
   document.getElementById('fs-con').style.display=on?'':'none';
   document.getElementById('sync-btn').style.display=on?'':'none';
-  const bkBtn=document.getElementById('backup-btn');if(bkBtn)bkBtn.style.display=on?'':'none';
-  if(on){const cid=localStorage.getItem('bl_drive_backup_cid')||'';if(cid){driveBackupClientId=cid;checkAutoBackup();}}
+  if(on){
+    const cid=localStorage.getItem('bl_drive_backup_cid')||'';
+    if(cid){driveBackupClientId=cid;const bkBtn=document.getElementById('backup-btn');if(bkBtn)bkBtn.style.display='';checkAutoBackup();}
+  }
   if(on){const u=document.getElementById('share-url-display');if(u)u.textContent=window.location.href;}
 }
 
@@ -2005,11 +2067,17 @@ function updateBackupUI(){
 }
 
 async function triggerDriveBackup(manual){
+  // Get client ID from input field, localStorage, or existing variable
   if(!driveBackupClientId){
-    // Need to configure — prompt for client ID if not set
-    const cid = localStorage.getItem('bl_drive_backup_cid') || '';
+    const inputEl = document.getElementById('backup-client-id');
+    const fromInput = inputEl ? inputEl.value.trim() : '';
+    const fromStorage = localStorage.getItem('bl_drive_backup_cid') || '';
+    const cid = fromInput || fromStorage;
     if(!cid){
-      if(manual) om('mo-drive'); // Redirect to Firebase modal which has cid field
+      if(manual){
+        toast('Enter your Google OAuth Client ID in the Firebase sync modal first','e');
+        om('mo-drive');
+      }
       return;
     }
     driveBackupClientId = cid;
