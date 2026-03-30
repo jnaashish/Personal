@@ -1280,7 +1280,7 @@ function saveBackupConfig(){
   const cid=(document.getElementById('backup-client-id')?.value||'').trim();
   if(!cid){toast('Enter your OAuth Client ID first','e');return;}
   if(!cid.includes('googleusercontent.com')){
-    toast('That doesn't look like a valid Client ID (should end in .googleusercontent.com)','e');
+    toast('That does not look like a valid Client ID (should end in .googleusercontent.com)','e');
     return;
   }
   localStorage.setItem('bl_drive_backup_cid',cid);
