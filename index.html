@@ -224,6 +224,33 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 .drop-zone p{color:var(--muted);font-size:14px}.drop-zone strong{color:var(--accent)}
 .dz-icon{font-size:32px;margin-bottom:10px}
 .size-warn{background:var(--danger-light);border:1px solid #e8b0b0;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--danger);margin-top:10px;display:none}
+
+/* ── LOAN TRACKER ── */
+.loan-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.loan-kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow);position:relative;overflow:hidden;text-align:center}
+.loan-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
+.lk1::before{background:#3a6bc1}.lk2::before{background:#c17f3a}.lk3::before{background:#c13a3a}.lk4::before{background:#3a9c6b}.lk5::before{background:#9c3a9c}.lk6::before{background:#6b4a20}
+.loan-kpi .kl{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.loan-kpi .kv{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--ink);letter-spacing:-.5px}
+.loan-kpi .ks{font-size:11px;color:var(--muted);margin-top:3px}
+.amort-table{width:100%;border-collapse:collapse;font-size:13px}
+.amort-table th{text-align:left;font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--surface);z-index:1}
+.amort-table td{padding:8px 10px;border-bottom:1px solid var(--bg2);color:var(--ink2)}
+.amort-table tr:hover td{background:var(--surface2)}
+.amort-table tr.holiday td{background:rgba(193,127,58,.07);color:var(--accent)}
+.amort-table tr.past td{color:var(--muted)}
+.amort-table tr.current td{background:rgba(58,156,107,.08);font-weight:600}
+.amort-table td.cr{text-align:right;font-family:'IBM Plex Mono',monospace}
+.amort-wrap{max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:12px}
+.amort-wrap::-webkit-scrollbar{width:5px}
+.amort-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px}
+.loan-select-card{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px}
+.loan-select-card:hover,.loan-select-card.sel{border-color:var(--accent2);background:var(--accent2-light)}
+.loan-select-card.sel .lsc-name{color:var(--accent2)}
+.lsc-icon{font-size:24px}.lsc-name{font-weight:700;font-size:14px;color:var(--ink)}.lsc-sub{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+.loan-config-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.holiday-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:var(--accent-light);color:var(--accent);font-family:'IBM Plex Mono',monospace}
+@media(max-width:768px){.loan-summary-grid{grid-template-columns:1fr 1fr}.loan-config-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -250,6 +277,7 @@ tbody td:first-child{color:var(--ink);font-weight:500}
     <button class="nb" onclick="go('import')"><span class="ic">📥</span><span>Bulk Import</span></button>
     <button class="nb" onclick="go('categories')"><span class="ic">🏷️</span><span>Categories</span></button>
     <button class="nb" onclick="go('documents')"><span class="ic">📁</span><span>Documents</span></button>
+    <button class="nb" onclick="go('loan')"><span class="ic">🏦</span><span>Loan Tracker</span></button>
     <div class="nl">Insights</div>
     <button class="nb" onclick="go('analytics')"><span class="ic">📈</span><span>Analytics</span></button>
   </nav>
@@ -472,6 +500,108 @@ tbody td:first-child{color:var(--ink);font-weight:500}
   <div id="doc-grid" class="doc-grid" style="display:none"></div>
 </section>
 
+
+<!-- LOAN TRACKER -->
+<section id="sec-loan" class="sec">
+  <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div><h2>Loan Tracker</h2><p>Interest cost, EMI schedule &amp; holiday period analysis</p></div>
+  </div>
+
+  <!-- Step 1: Select loan source -->
+  <div class="card" id="loan-select-card">
+    <div class="ch"><div class="ct">Select Loan Source</div></div>
+    <div id="loan-src-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+      <div class="empty"><div class="ei">🏦</div><p>No loan sources found</p><small>Add a source with type "Bank Loan" in the Sources tab</small></div>
+    </div>
+  </div>
+
+  <!-- Step 2: Loan config -->
+  <div class="card" id="loan-config-card" style="display:none">
+    <div class="ch">
+      <div class="ct">Loan Configuration <span id="loan-config-name" style="color:var(--accent2)"></span></div>
+      <button class="btn bs sm" onclick="resetLoanSelection()">← Change Loan</button>
+    </div>
+    <div class="loan-config-grid">
+      <div class="fd"><label>Interest Rate (% p.a.)</label><input type="number" id="ln-rate" value="8.5" step="0.05" min="1" max="30" oninput="recalcLoan()"/></div>
+      <div class="fd"><label>Loan Tenure (months)</label><input type="number" id="ln-tenure" value="240" min="1" max="360" oninput="recalcLoan()"/></div>
+      <div class="fd"><label>EMI Day of Month</label><input type="number" id="ln-emi-day" value="5" min="1" max="28" oninput="recalcLoan()"/></div>
+    </div>
+    <div class="loan-config-grid mt2" style="margin-top:14px">
+      <div class="fd">
+        <label>Holiday Period (months) <span style="color:var(--muted);font-weight:400;font-size:10px">— no principal repayment</span></label>
+        <input type="number" id="ln-holiday" value="0" min="0" max="36" oninput="recalcLoan()"/>
+      </div>
+      <div class="fd">
+        <label>Pay Interest During Holiday?</label>
+        <select id="ln-holiday-emi" onchange="recalcLoan()">
+          <option value="interest_only">Yes — pay interest only each month</option>
+          <option value="none">No — defer all payments (capitalise interest)</option>
+        </select>
+      </div>
+      <div class="fd">
+        <label>EMI Amount (₹) <span style="color:var(--muted);font-weight:400;font-size:10px">— 0 = auto-calculate</span></label>
+        <input type="number" id="ln-emi-override" value="0" min="0" oninput="recalcLoan()" placeholder="Leave 0 to auto-calculate"/>
+      </div>
+    </div>
+    <div class="info-box mt2" id="loan-holiday-note" style="margin-top:14px;display:none"></div>
+  </div>
+
+  <!-- Summary KPIs -->
+  <div class="loan-summary-grid" id="loan-kpi-grid" style="display:none">
+    <div class="loan-kpi lk1"><div class="kl">Total Sanctioned</div><div class="kv" id="lk-sanctioned">₹0</div><div class="ks">full loan amount</div></div>
+    <div class="loan-kpi lk2"><div class="kl">Disbursed So Far</div><div class="kv" id="lk-disbursed">₹0</div><div class="ks">received till today</div></div>
+    <div class="loan-kpi lk3"><div class="kl">Total Interest Cost</div><div class="kv" id="lk-total-interest">₹0</div><div class="ks">full tenure</div></div>
+    <div class="loan-kpi lk4"><div class="kl">Interest Accrued</div><div class="kv" id="lk-accrued">₹0</div><div class="ks">till today</div></div>
+    <div class="loan-kpi lk5"><div class="kl">EMIs Paid</div><div class="kv" id="lk-emis-paid">0</div><div class="ks"><span id="lk-principal-paid"></span></div></div>
+    <div class="loan-kpi lk6"><div class="kl">Outstanding Balance</div><div class="kv" id="lk-balance">₹0</div><div class="ks">principal remaining</div></div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="card" id="loan-progress-card" style="display:none">
+    <div class="ch"><div class="ct">Repayment Progress</div><span id="loan-progress-label" class="mono tm" style="font-size:12px"></span></div>
+    <div style="background:var(--bg2);border-radius:8px;height:14px;overflow:hidden;margin-bottom:12px">
+      <div id="loan-progress-bar" style="height:100%;border-radius:8px;background:linear-gradient(90deg,var(--success),#5ab88a);transition:width .6s ease;width:0%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
+      <span>Loan start: <strong id="lk-start-date" style="color:var(--ink)">—</strong></span>
+      <span>EMI ends: <strong id="lk-end-date" style="color:var(--ink)">—</strong></span>
+    </div>
+    <div id="loan-holiday-strip" style="margin-top:10px;display:none">
+      <span class="holiday-badge">🏖 Holiday period: <span id="lk-holiday-range"></span></span>
+      <span style="font-size:12px;color:var(--muted);margin-left:8px" id="lk-holiday-desc"></span>
+    </div>
+  </div>
+
+  <!-- Amortisation table -->
+  <div class="card" id="loan-amort-card" style="display:none">
+    <div class="ch">
+      <div class="ct">Monthly Schedule</div>
+      <div class="flex gap2" style="align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="ln-show-all" onchange="renderAmortTable()" style="width:auto"/>
+          Show all months
+        </label>
+        <span id="amort-legend" style="font-size:11px;color:var(--muted)">
+          <span style="color:var(--accent)">■</span> Holiday &nbsp;
+          <span style="color:var(--success)">■</span> Current month
+        </span>
+      </div>
+    </div>
+    <div class="amort-wrap">
+      <table class="amort-table">
+        <thead><tr>
+          <th>#</th><th>Month</th><th>Type</th>
+          <th class="cr">Opening Balance</th>
+          <th class="cr">Interest</th>
+          <th class="cr">Principal</th>
+          <th class="cr">EMI Paid</th>
+          <th class="cr">Closing Balance</th>
+        </tr></thead>
+        <tbody id="amort-body"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
 
 </main>
 </div>
@@ -771,7 +901,7 @@ function go(id){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
   document.querySelectorAll('.nb').forEach(b=>{if(b.getAttribute('onclick')?.includes("'"+id+"'"))b.classList.add('active');});
-  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{},documents:()=>{docFilt=null;renderDocs();}})[id]?.();
+  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{},documents:()=>{docFilt=null;renderDocs();},loan:renderLoan})[id]?.();
 }
 
 // ━━━ UTILS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2028,6 +2158,340 @@ async function deleteDoc(id){
 }
 
 
+
+
+// ━━━ LOAN TRACKER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Loan calculation logic:
+// 1. Holiday period = months from first disbursement where no principal repayment
+// 2. During holiday, either: (a) pay interest only monthly, or (b) capitalise interest
+// 3. After holiday, standard reducing-balance EMI schedule
+// 4. EMI day = 5th of each month
+// 5. Multiple disbursements (tranches) tracked via source history
+// 6. Interest accrued on ACTUAL disbursed amount per tranche date
+
+let selectedLoanId = null;
+let loanSchedule = [];   // computed amortisation rows
+let loanConfig = {};     // current loan parameters
+
+function renderLoan() {
+  selectedLoanId = localStorage.getItem('bl_selected_loan') || null;
+  renderLoanSources();
+  if (selectedLoanId) {
+    const src = S.sources.find(s => s.id === selectedLoanId);
+    if (src) selectLoan(selectedLoanId, false);
+  }
+}
+
+function renderLoanSources() {
+  const loanSources = S.sources.filter(s => s.type === 'loan');
+  const list = document.getElementById('loan-src-list');
+  if (!list) return;
+  if (!loanSources.length) {
+    list.innerHTML = '<div class="empty"><div class="ei">🏦</div><p>No loan sources found</p><small>Add a source with type "Bank Loan" in Sources</small></div>';
+    return;
+  }
+  list.innerHTML = loanSources.map(src => {
+    const hist = src.history || [];
+    const firstDate = hist.length ? hist[0].date : src.date;
+    return `<div class="loan-select-card ${selectedLoanId===src.id?'sel':''}" onclick="selectLoan('${src.id}',true)">
+      <div class="lsc-icon">🏦</div>
+      <div>
+        <div class="lsc-name">${src.name}</div>
+        <div class="lsc-sub">${fmt(src.total)} sanctioned · ${hist.length||1} disbursement${(hist.length||1)!==1?'s':''}</div>
+        <div class="lsc-sub">From: ${fd(firstDate)||'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectLoan(id, save) {
+  selectedLoanId = id;
+  if (save) localStorage.setItem('bl_selected_loan', id);
+  const src = S.sources.find(s => s.id === id);
+  if (!src) return;
+
+  // Show config panel
+  document.getElementById('loan-select-card').style.display = 'none';
+  document.getElementById('loan-config-card').style.display = '';
+  document.getElementById('loan-config-name').textContent = src.name;
+
+  // Restore saved config or set defaults
+  const saved = JSON.parse(localStorage.getItem('bl_loan_cfg_' + id) || '{}');
+  document.getElementById('ln-rate').value     = saved.rate     || 8.5;
+  document.getElementById('ln-tenure').value   = saved.tenure   || 240;
+  document.getElementById('ln-emi-day').value  = saved.emiDay   || 5;
+  document.getElementById('ln-holiday').value  = saved.holiday  || 0;
+  document.getElementById('ln-holiday-emi').value = saved.holidayEmi || 'interest_only';
+  document.getElementById('ln-emi-override').value = saved.emiOverride || 0;
+
+  recalcLoan();
+}
+
+function resetLoanSelection() {
+  selectedLoanId = null;
+  localStorage.removeItem('bl_selected_loan');
+  document.getElementById('loan-select-card').style.display = '';
+  document.getElementById('loan-config-card').style.display = 'none';
+  document.getElementById('loan-kpi-grid').style.display = 'none';
+  document.getElementById('loan-progress-card').style.display = 'none';
+  document.getElementById('loan-amort-card').style.display = 'none';
+  renderLoanSources();
+}
+
+function saveLoanConfig() {
+  if (!selectedLoanId) return;
+  const cfg = {
+    rate: parseFloat(document.getElementById('ln-rate').value),
+    tenure: parseInt(document.getElementById('ln-tenure').value),
+    emiDay: parseInt(document.getElementById('ln-emi-day').value),
+    holiday: parseInt(document.getElementById('ln-holiday').value),
+    holidayEmi: document.getElementById('ln-holiday-emi').value,
+    emiOverride: parseFloat(document.getElementById('ln-emi-override').value) || 0,
+  };
+  localStorage.setItem('bl_loan_cfg_' + selectedLoanId, JSON.stringify(cfg));
+  return cfg;
+}
+
+function recalcLoan() {
+  const cfg = saveLoanConfig();
+  const src = S.sources.find(s => s.id === selectedLoanId);
+  if (!src) return;
+
+  loanConfig = cfg;
+  loanSchedule = buildAmortisation(src, cfg);
+  updateLoanKPIs(src, cfg, loanSchedule);
+  renderAmortTable();
+  updateHolidayNote(cfg);
+}
+
+// ── Core amortisation engine ──────────────────────────────────
+function buildAmortisation(src, cfg) {
+  const hist = src.history && src.history.length ? src.history : [{date: src.date, amount: src.recv, notes: 'Initial'}];
+  const monthlyRate = cfg.rate / 100 / 12;
+  const holidayMonths = cfg.holiday || 0;
+  const emiDay = cfg.emiDay || 5;
+  const totalTenure = cfg.tenure;
+
+  // First disbursement date determines loan start
+  const firstDisb = hist[0].date;
+  if (!firstDisb) return [];
+
+  // Build a timeline of disbursement events by month
+  const disbByMonth = {};
+  hist.forEach(h => {
+    if (!h.date) return;
+    const key = h.date.substring(0, 7); // YYYY-MM
+    disbByMonth[key] = (disbByMonth[key] || 0) + h.amount;
+  });
+
+  // Loan start date — first disbursement month
+  const [sy, sm] = firstDisb.split('-').map(Number);
+  const today = new Date();
+  const todayYM = today.getFullYear() * 12 + today.getMonth();
+
+  // Build schedule
+  const rows = [];
+  let principal = 0;       // outstanding principal (reduces-balance)
+  let capitalizedInt = 0;  // interest capitalised during holiday (if no EMI)
+
+  // Calculate standard EMI for post-holiday period
+  // Principal after holiday = sanctioned amount (or disbursed)
+  // We'll recalculate after holiday ends
+  const totalPrincipal = src.total; // use sanctioned amount for EMI calc
+  const postHolidayMonths = totalTenure - holidayMonths;
+  let stdEMI = cfg.emiOverride > 0 ? cfg.emiOverride :
+    (postHolidayMonths <= 0 ? 0 :
+      totalPrincipal * monthlyRate * Math.pow(1+monthlyRate, postHolidayMonths) /
+      (Math.pow(1+monthlyRate, postHolidayMonths) - 1));
+  stdEMI = Math.round(stdEMI);
+
+  for (let m = 0; m < totalTenure; m++) {
+    const monthNum = (sm - 1 + m) % 12;  // 0-based month
+    const yearNum  = sy + Math.floor((sm - 1 + m) / 12);
+    const monthKey = `${yearNum}-${String(monthNum+1).padStart(2,'0')}`;
+    const monthYM  = yearNum * 12 + monthNum;
+    const isHoliday = m < holidayMonths;
+    const isPast = monthYM < todayYM;
+    const isCurrent = monthYM === todayYM;
+
+    // Add new disbursements this month
+    if (disbByMonth[monthKey]) {
+      principal += disbByMonth[monthKey];
+    }
+
+    const openingBal = principal + capitalizedInt;
+    const interest = Math.round(openingBal * monthlyRate);
+    let emiPaid = 0, principalPaid = 0, intPaid = 0;
+
+    if (isHoliday) {
+      if (cfg.holidayEmi === 'interest_only') {
+        // Pay interest only — principal unchanged
+        emiPaid = interest;
+        intPaid = interest;
+        principalPaid = 0;
+      } else {
+        // Defer all — capitalise interest into principal
+        capitalizedInt += interest;
+        emiPaid = 0;
+        intPaid = 0;
+        principalPaid = 0;
+      }
+    } else {
+      // Post-holiday: if this is the first EMI month, recalculate EMI
+      // on the actual outstanding balance (principal + any capitalised interest)
+      if (m === holidayMonths && cfg.emiOverride === 0) {
+        const remMonths = totalTenure - m;
+        const actBalance = principal + capitalizedInt;
+        if (remMonths > 0 && monthlyRate > 0) {
+          stdEMI = Math.round(
+            actBalance * monthlyRate * Math.pow(1+monthlyRate, remMonths) /
+            (Math.pow(1+monthlyRate, remMonths) - 1)
+          );
+        }
+        capitalizedInt = 0; // now rolled into principal for EMI calc
+      }
+      emiPaid = Math.min(stdEMI, openingBal + interest);
+      intPaid = Math.min(interest, emiPaid);
+      principalPaid = emiPaid - intPaid;
+      principal = Math.max(0, principal + capitalizedInt - principalPaid);
+      capitalizedInt = 0;
+    }
+
+    const closingBal = principal + capitalizedInt;
+
+    const monthName = new Date(yearNum, monthNum, 1)
+      .toLocaleString('en-IN', {month:'short', year:'2-digit'});
+
+    // EMI due date this month
+    const emiDate = `${String(emiDay).padStart(2,'0')} ${monthName}`;
+
+    rows.push({
+      num: m + 1,
+      monthKey,
+      monthName,
+      emiDate,
+      isHoliday,
+      isPast,
+      isCurrent,
+      openingBal: Math.round(openingBal),
+      interest,
+      principalPaid,
+      emiPaid,
+      closingBal: Math.round(closingBal),
+      disbursed: disbByMonth[monthKey] || 0,
+    });
+
+    if (closingBal <= 0 && !isHoliday) break;
+  }
+
+  return rows;
+}
+
+function updateLoanKPIs(src, cfg, rows) {
+  const today = new Date();
+  const todayYM = today.getFullYear() * 12 + today.getMonth();
+  const hist = src.history && src.history.length ? src.history : [{date:src.date, amount:src.recv}];
+  const firstDate = hist[0].date || '';
+
+  const totalInterest = rows.reduce((s,r) => s + r.interest, 0);
+  const pastRows = rows.filter(r => r.isPast || r.isCurrent);
+  const accruedInt = pastRows.reduce((s,r) => s + r.interest, 0);
+  const totalEmiPaid = pastRows.reduce((s,r) => s + r.emiPaid, 0);
+  const totalPrincipalPaid = pastRows.reduce((s,r) => s + r.principalPaid, 0);
+  const emisPaid = pastRows.filter(r => r.emiPaid > 0).length;
+  const currentRow = rows.find(r => r.isCurrent) || rows[pastRows.length - 1];
+  const outstandingBal = currentRow ? currentRow.closingBal : src.recv;
+
+  // Progress %
+  const pct = src.total > 0 ? Math.min(100, Math.round(totalPrincipalPaid / src.total * 100)) : 0;
+
+  // Last EMI row
+  const lastRow = rows[rows.length - 1];
+  const endDate = lastRow ? lastRow.monthName : '—';
+
+  document.getElementById('lk-sanctioned').textContent = fmt(src.total);
+  document.getElementById('lk-disbursed').textContent = fmt(src.recv);
+  document.getElementById('lk-total-interest').textContent = fmt(totalInterest);
+  document.getElementById('lk-accrued').textContent = fmt(accruedInt);
+  document.getElementById('lk-emis-paid').textContent = emisPaid;
+  document.getElementById('lk-principal-paid').textContent = fmt(totalPrincipalPaid) + ' principal paid';
+  document.getElementById('lk-balance').textContent = fmt(outstandingBal);
+  document.getElementById('loan-progress-bar').style.width = pct + '%';
+  document.getElementById('loan-progress-label').textContent = pct + '% repaid · ₹' + (totalPrincipalPaid/100000).toFixed(1) + 'L of ₹' + (src.total/100000).toFixed(1) + 'L';
+  document.getElementById('lk-start-date').textContent = fd(firstDate) || '—';
+  document.getElementById('lk-end-date').textContent = endDate;
+
+  // Holiday strip
+  const hStrip = document.getElementById('loan-holiday-strip');
+  if (cfg.holiday > 0 && rows.length) {
+    hStrip.style.display = '';
+    const hEnd = rows[cfg.holiday - 1];
+    document.getElementById('lk-holiday-range').textContent =
+      rows[0].monthName + ' → ' + (hEnd ? hEnd.monthName : '—');
+    document.getElementById('lk-holiday-desc').textContent =
+      cfg.holidayEmi === 'interest_only'
+        ? '(interest-only payments during holiday)'
+        : '(all payments deferred — interest capitalised)';
+  } else {
+    hStrip.style.display = 'none';
+  }
+
+  // Show all panels
+  document.getElementById('loan-kpi-grid').style.display = 'grid';
+  document.getElementById('loan-progress-card').style.display = '';
+  document.getElementById('loan-amort-card').style.display = '';
+}
+
+function updateHolidayNote(cfg) {
+  const note = document.getElementById('loan-holiday-note');
+  if (!note) return;
+  if (cfg.holiday > 0) {
+    note.style.display = '';
+    if (cfg.holidayEmi === 'interest_only') {
+      note.innerHTML = `<strong>Holiday Period (${cfg.holiday} months) — Interest Only:</strong> During the first ${cfg.holiday} months you pay only the monthly interest (no principal). This keeps your principal balance unchanged. EMI is lower but total interest paid is higher since principal reduces slower.`;
+    } else {
+      note.innerHTML = `<strong>Holiday Period (${cfg.holiday} months) — Full Deferral:</strong> No payments during the first ${cfg.holiday} months. Interest accrues and is added to your outstanding principal (capitalised). Your effective loan amount and EMIs will be higher after the holiday ends.`;
+    }
+  } else {
+    note.style.display = 'none';
+  }
+}
+
+function renderAmortTable() {
+  const body = document.getElementById('amort-body');
+  if (!body || !loanSchedule.length) return;
+  const showAll = document.getElementById('ln-show-all')?.checked;
+  const today = new Date();
+  const todayYM = today.getFullYear() * 12 + today.getMonth();
+
+  // Default: show ±6 months around today + holiday months
+  const rows = showAll ? loanSchedule : loanSchedule.filter((r, i) => {
+    const [yr, mo] = r.monthKey.split('-').map(Number);
+    const ym = yr * 12 + (mo - 1);
+    return r.isHoliday || (ym >= todayYM - 3 && ym <= todayYM + 9) || i < 3;
+  });
+
+  body.innerHTML = rows.map(r => {
+    const cls = r.isHoliday ? 'holiday' : r.isCurrent ? 'current' : r.isPast ? 'past' : '';
+    const typeLabel = r.isHoliday
+      ? (loanConfig.holidayEmi === 'interest_only' ? '🏖 Interest Only' : '🏖 Deferred')
+      : '📅 EMI';
+    return `<tr class="${cls}">
+      <td>${r.num}</td>
+      <td>${r.monthName}</td>
+      <td><span style="font-size:12px">${typeLabel}</span>${r.disbursed>0?` <span class="holiday-badge" style="background:var(--accent2-light);color:var(--accent2)">+${fmt(r.disbursed)}</span>`:''}</td>
+      <td class="cr">${fmt(r.openingBal)}</td>
+      <td class="cr" style="color:var(--danger)">${fmt(r.interest)}</td>
+      <td class="cr" style="color:var(--success)">${r.principalPaid > 0 ? fmt(r.principalPaid) : '—'}</td>
+      <td class="cr" style="font-weight:600">${r.emiPaid > 0 ? fmt(r.emiPaid) : (r.isHoliday && loanConfig.holidayEmi==='none' ? '<span style="color:var(--muted)">Deferred</span>' : '—')}</td>
+      <td class="cr" style="${r.isCurrent?'color:var(--success);font-weight:700':''}">${fmt(r.closingBal)}</td>
+    </tr>`;
+  }).join('');
+
+  if (!showAll && loanSchedule.length > rows.length) {
+    body.innerHTML += `<tr><td colspan="8" style="text-align:center;padding:12px;color:var(--muted);font-size:12px">Showing ${rows.length} of ${loanSchedule.length} months — <label style="cursor:pointer;color:var(--accent);font-weight:600"><input type="checkbox" id="ln-show-all" onchange="renderAmortTable()" style="width:auto"/> Show all</label></td></tr>`;
+  }
+}
 
 // ━━━ GOOGLE DRIVE DAILY BACKUP ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Uses Google Drive REST API with OAuth2 token
