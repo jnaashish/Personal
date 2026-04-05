@@ -528,20 +528,28 @@ tbody td:first-child{color:var(--ink);font-weight:500}
     </div>
     <div class="loan-config-grid mt2" style="margin-top:14px">
       <div class="fd">
-        <label>Holiday Period (months) <span style="color:var(--muted);font-weight:400;font-size:10px">— no principal repayment</span></label>
+        <label>Holiday Period (months) <span style="color:var(--muted);font-weight:400;font-size:10px">— from disbursement date</span></label>
         <input type="number" id="ln-holiday" value="0" min="0" max="36" oninput="recalcLoan()"/>
       </div>
       <div class="fd">
-        <label>Pay Interest During Holiday?</label>
+        <label>Payment during Holiday</label>
         <select id="ln-holiday-emi" onchange="recalcLoan()">
-          <option value="interest_only">Yes — pay interest only each month</option>
-          <option value="none">No — defer all payments (capitalise interest)</option>
+          <option value="full_emi">Full EMI (principal + interest)</option>
+          <option value="interest_only">Interest only each month</option>
+          <option value="none">No payment — defer &amp; capitalise</option>
         </select>
       </div>
       <div class="fd">
-        <label>EMI Amount (₹) <span style="color:var(--muted);font-weight:400;font-size:10px">— 0 = auto-calculate</span></label>
-        <input type="number" id="ln-emi-override" value="0" min="0" oninput="recalcLoan()" placeholder="Leave 0 to auto-calculate"/>
+        <label>EMI Start Date <span style="color:var(--muted);font-weight:400;font-size:10px">— first EMI month</span></label>
+        <input type="month" id="ln-emi-start" oninput="recalcLoan()" placeholder="YYYY-MM"/>
       </div>
+    </div>
+    <div class="loan-config-grid mt2" style="margin-top:10px">
+      <div class="fd">
+        <label>Fixed EMI Amount (₹) <span style="color:var(--muted);font-weight:400;font-size:10px">— 0 = auto-calculate</span></label>
+        <input type="number" id="ln-emi-override" value="0" min="0" oninput="recalcLoan()" placeholder="0 = auto"/>
+      </div>
+      <div class="fd"><label>&nbsp;</label><div id="ln-emi-preview" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--muted)">Auto-calculated EMI will show here</div></div>
     </div>
     <div class="info-box mt2" id="loan-holiday-note" style="margin-top:14px;display:none"></div>
   </div>
@@ -2221,8 +2229,9 @@ function selectLoan(id, save) {
   document.getElementById('ln-tenure').value   = saved.tenure   || 240;
   document.getElementById('ln-emi-day').value  = saved.emiDay   || 5;
   document.getElementById('ln-holiday').value  = saved.holiday  || 0;
-  document.getElementById('ln-holiday-emi').value = saved.holidayEmi || 'interest_only';
+  document.getElementById('ln-holiday-emi').value = saved.holidayEmi || 'full_emi';
   document.getElementById('ln-emi-override').value = saved.emiOverride || 0;
+  document.getElementById('ln-emi-start').value = saved.emiStart || '';
 
   recalcLoan();
 }
@@ -2246,6 +2255,7 @@ function saveLoanConfig() {
     emiDay: parseInt(document.getElementById('ln-emi-day').value),
     holiday: parseInt(document.getElementById('ln-holiday').value),
     holidayEmi: document.getElementById('ln-holiday-emi').value,
+    emiStart: document.getElementById('ln-emi-start').value || '',
     emiOverride: parseFloat(document.getElementById('ln-emi-override').value) || 0,
   };
   localStorage.setItem('bl_loan_cfg_' + selectedLoanId, JSON.stringify(cfg));
@@ -2266,122 +2276,173 @@ function recalcLoan() {
 
 // ── Core amortisation engine ──────────────────────────────────
 function buildAmortisation(src, cfg) {
-  const hist = src.history && src.history.length ? src.history : [{date: src.date, amount: src.recv, notes: 'Initial'}];
+  const hist = src.history && src.history.length
+    ? src.history
+    : [{date: src.date, amount: src.recv, notes: 'Initial'}];
   const monthlyRate = cfg.rate / 100 / 12;
   const holidayMonths = cfg.holiday || 0;
   const emiDay = cfg.emiDay || 5;
   const totalTenure = cfg.tenure;
+  const holidayMode = cfg.holidayEmi || 'full_emi'; // full_emi | interest_only | none
 
-  // First disbursement date determines loan start
+  // First disbursement date
   const firstDisb = hist[0].date;
   if (!firstDisb) return [];
 
-  // Build a timeline of disbursement events by month
+  // Disbursements by YYYY-MM
   const disbByMonth = {};
   hist.forEach(h => {
     if (!h.date) return;
-    const key = h.date.substring(0, 7); // YYYY-MM
+    const key = h.date.substring(0, 7);
     disbByMonth[key] = (disbByMonth[key] || 0) + h.amount;
   });
 
-  // Loan start date — first disbursement month
   const [sy, sm] = firstDisb.split('-').map(Number);
   const today = new Date();
   const todayYM = today.getFullYear() * 12 + today.getMonth();
 
-  // Build schedule
-  const rows = [];
-  let principal = 0;       // outstanding principal (reduces-balance)
-  let capitalizedInt = 0;  // interest capitalised during holiday (if no EMI)
+  // Parse EMI start date if provided (YYYY-MM)
+  let emiStartYM = null;
+  if (cfg.emiStart && cfg.emiStart.length >= 7) {
+    const [esy, esm] = cfg.emiStart.split('-').map(Number);
+    emiStartYM = esy * 12 + (esm - 1);
+  }
 
-  // Calculate standard EMI for post-holiday period
-  // Principal after holiday = sanctioned amount (or disbursed)
-  // We'll recalculate after holiday ends
-  const totalPrincipal = src.total; // use sanctioned amount for EMI calc
+  // ── Determine standard EMI ──────────────────────────────
+  // We calculate EMI on the TOTAL sanctioned amount for post-holiday phase.
+  // If user provides a fixed override, use that.
   const postHolidayMonths = totalTenure - holidayMonths;
-  let stdEMI = cfg.emiOverride > 0 ? cfg.emiOverride :
-    (postHolidayMonths <= 0 ? 0 :
-      totalPrincipal * monthlyRate * Math.pow(1+monthlyRate, postHolidayMonths) /
+  let stdEMI = 0;
+  if (cfg.emiOverride > 0) {
+    stdEMI = Math.round(cfg.emiOverride);
+  } else if (postHolidayMonths > 0 && monthlyRate > 0) {
+    // Use full sanctioned principal for initial EMI estimate
+    // (will be recalculated at first post-holiday month on actual balance)
+    const P = src.total;
+    stdEMI = Math.round(P * monthlyRate * Math.pow(1+monthlyRate, postHolidayMonths) /
       (Math.pow(1+monthlyRate, postHolidayMonths) - 1));
-  stdEMI = Math.round(stdEMI);
+  }
 
-  for (let m = 0; m < totalTenure; m++) {
-    const monthNum = (sm - 1 + m) % 12;  // 0-based month
-    const yearNum  = sy + Math.floor((sm - 1 + m) / 12);
+  const rows = [];
+  let principal = 0;    // reducing-balance outstanding (excludes capitalised)
+  let capInt = 0;       // capitalised interest (only in 'none' mode)
+  let emiRecalcDone = false;
+
+  for (let m = 0; m < totalTenure + 60; m++) { // +60 buffer for edge cases
+    const monthIdx = (sm - 1 + m);
+    const monthNum = monthIdx % 12;      // 0-based
+    const yearNum  = sy + Math.floor(monthIdx / 12);
     const monthKey = `${yearNum}-${String(monthNum+1).padStart(2,'0')}`;
     const monthYM  = yearNum * 12 + monthNum;
     const isHoliday = m < holidayMonths;
-    const isPast = monthYM < todayYM;
+    const isPast    = monthYM < todayYM;
     const isCurrent = monthYM === todayYM;
 
-    // Add new disbursements this month
+    // ── Add disbursements arriving this month ──
     if (disbByMonth[monthKey]) {
       principal += disbByMonth[monthKey];
     }
 
-    const openingBal = principal + capitalizedInt;
-    const interest = Math.round(openingBal * monthlyRate);
-    let emiPaid = 0, principalPaid = 0, intPaid = 0;
+    // ── Opening balance = principal + any capitalised interest ──
+    const openingBal = principal + capInt;
+    if (openingBal <= 0 && m > 0) break; // fully repaid
 
-    if (isHoliday) {
-      if (cfg.holidayEmi === 'interest_only') {
-        // Pay interest only — principal unchanged
+    // ── Monthly interest on opening balance ──
+    const interest = Math.round(openingBal * monthlyRate);
+
+    // ── Decide if payment happens this month ──
+    // EMI start date: no payment before emiStartYM (if set)
+    const paymentBlocked = emiStartYM !== null && monthYM < emiStartYM;
+
+    let emiPaid = 0, principalPaid = 0, intPaid = 0;
+    let rowType = '';
+
+    if (paymentBlocked) {
+      // No payment — capitalise interest regardless of mode
+      capInt += interest;
+      rowType = 'no-payment';
+
+    } else if (isHoliday) {
+      if (holidayMode === 'full_emi') {
+        // ── USER EXAMPLE MATH ──
+        // Opening: 1L.  Interest: 1K.  Balance after interest: 1.01L
+        // Pay full EMI (e.g. 10K): 1.01L - 10K = 91K
+        // i.e. interest adds to balance, then EMI reduces it
+        const balWithInterest = openingBal + interest;
+        emiPaid = Math.min(stdEMI, balWithInterest);
+        intPaid = Math.min(interest, emiPaid);
+        principalPaid = Math.max(0, emiPaid - intPaid);
+        principal = Math.max(0, principal + capInt - principalPaid);
+        capInt = 0;
+        rowType = 'full-emi-holiday';
+
+      } else if (holidayMode === 'interest_only') {
+        // Pay interest only — principal balance stays flat
         emiPaid = interest;
         intPaid = interest;
         principalPaid = 0;
+        // principal unchanged
+        rowType = 'interest-only';
+
       } else {
-        // Defer all — capitalise interest into principal
-        capitalizedInt += interest;
+        // none — defer: capitalise interest into outstanding
+        capInt += interest;
         emiPaid = 0;
         intPaid = 0;
         principalPaid = 0;
+        rowType = 'deferred';
       }
+
     } else {
-      // Post-holiday: if this is the first EMI month, recalculate EMI
-      // on the actual outstanding balance (principal + any capitalised interest)
-      if (m === holidayMonths && cfg.emiOverride === 0) {
+      // ── POST-HOLIDAY: standard reducing-balance EMI ──
+      // On the very first post-holiday EMI, recalculate EMI on actual balance
+      if (!emiRecalcDone && cfg.emiOverride === 0) {
+        emiRecalcDone = true;
         const remMonths = totalTenure - m;
-        const actBalance = principal + capitalizedInt;
-        if (remMonths > 0 && monthlyRate > 0) {
+        const actBal = principal + capInt;
+        if (remMonths > 0 && monthlyRate > 0 && actBal > 0) {
           stdEMI = Math.round(
-            actBalance * monthlyRate * Math.pow(1+monthlyRate, remMonths) /
+            actBal * monthlyRate * Math.pow(1+monthlyRate, remMonths) /
             (Math.pow(1+monthlyRate, remMonths) - 1)
           );
         }
-        capitalizedInt = 0; // now rolled into principal for EMI calc
+        // Roll capitalised interest into principal
+        principal += capInt;
+        capInt = 0;
       }
-      emiPaid = Math.min(stdEMI, openingBal + interest);
+      const balWithInterest = principal + capInt + interest;
+      emiPaid = Math.min(stdEMI, balWithInterest);
       intPaid = Math.min(interest, emiPaid);
-      principalPaid = emiPaid - intPaid;
-      principal = Math.max(0, principal + capitalizedInt - principalPaid);
-      capitalizedInt = 0;
+      principalPaid = Math.max(0, emiPaid - intPaid);
+      principal = Math.max(0, principal + capInt - principalPaid);
+      capInt = 0;
+      rowType = 'emi';
     }
 
-    const closingBal = principal + capitalizedInt;
-
+    const closingBal = Math.round(Math.max(0, principal + capInt));
     const monthName = new Date(yearNum, monthNum, 1)
       .toLocaleString('en-IN', {month:'short', year:'2-digit'});
 
-    // EMI due date this month
-    const emiDate = `${String(emiDay).padStart(2,'0')} ${monthName}`;
-
     rows.push({
-      num: m + 1,
-      monthKey,
-      monthName,
-      emiDate,
-      isHoliday,
-      isPast,
-      isCurrent,
+      num: rows.length + 1,
+      monthKey, monthName,
+      isHoliday, isPast, isCurrent, paymentBlocked, rowType,
       openingBal: Math.round(openingBal),
       interest,
-      principalPaid,
-      emiPaid,
-      closingBal: Math.round(closingBal),
+      intPaid,
+      principalPaid: Math.round(principalPaid),
+      emiPaid: Math.round(emiPaid),
+      closingBal,
       disbursed: disbByMonth[monthKey] || 0,
     });
 
-    if (closingBal <= 0 && !isHoliday) break;
+    if (closingBal <= 0) break;
+  }
+
+  // Update EMI preview in UI
+  const preview = document.getElementById('ln-emi-preview');
+  if (preview) {
+    preview.innerHTML = `<span style="color:var(--ink);font-weight:700;font-size:15px">${fmt(stdEMI)}</span><span style="color:var(--muted);font-size:11px"> / month${holidayMonths>0&&holidayMode!=='full_emi'?' (post-holiday)':''}</span>`;
   }
 
   return rows;
@@ -2447,11 +2508,12 @@ function updateHolidayNote(cfg) {
   if (!note) return;
   if (cfg.holiday > 0) {
     note.style.display = '';
-    if (cfg.holidayEmi === 'interest_only') {
-      note.innerHTML = `<strong>Holiday Period (${cfg.holiday} months) — Interest Only:</strong> During the first ${cfg.holiday} months you pay only the monthly interest (no principal). This keeps your principal balance unchanged. EMI is lower but total interest paid is higher since principal reduces slower.`;
-    } else {
-      note.innerHTML = `<strong>Holiday Period (${cfg.holiday} months) — Full Deferral:</strong> No payments during the first ${cfg.holiday} months. Interest accrues and is added to your outstanding principal (capitalised). Your effective loan amount and EMIs will be higher after the holiday ends.`;
-    }
+    const msgs = {
+      'full_emi': `<strong>Holiday Period (${cfg.holiday} months) — Full EMI:</strong> You pay the full EMI every month during the holiday. Interest is charged on the opening balance, added to it, then the full EMI is deducted. E.g. ₹1L balance + ₹1K interest = ₹1.01L → pay ₹10K EMI → ₹91K balance. Principal reduces from Day 1.`,
+      'interest_only': `<strong>Holiday Period (${cfg.holiday} months) — Interest Only:</strong> You pay only the monthly interest. Principal stays flat. After the holiday, full EMIs start on the original principal. Useful when construction is ongoing.`,
+      'none': `<strong>Holiday Period (${cfg.holiday} months) — Full Deferral:</strong> No payments at all. Interest accrues and is capitalised (added to principal) each month. After the holiday your outstanding balance is higher and EMIs are recalculated on that larger figure.`,
+    };
+    note.innerHTML = msgs[cfg.holidayEmi] || msgs['full_emi'];
   } else {
     note.style.display = 'none';
   }
@@ -2472,18 +2534,27 @@ function renderAmortTable() {
   });
 
   body.innerHTML = rows.map(r => {
-    const cls = r.isHoliday ? 'holiday' : r.isCurrent ? 'current' : r.isPast ? 'past' : '';
-    const typeLabel = r.isHoliday
-      ? (loanConfig.holidayEmi === 'interest_only' ? '🏖 Interest Only' : '🏖 Deferred')
-      : '📅 EMI';
+    const cls = r.paymentBlocked ? 'holiday' : r.isHoliday ? 'holiday' : r.isCurrent ? 'current' : r.isPast ? 'past' : '';
+    const typeLabels = {
+      'full-emi-holiday': '🏖 Full EMI',
+      'interest-only':    '🏖 Interest Only',
+      'deferred':         '🏖 Deferred',
+      'no-payment':       '⏸ No Payment',
+      'emi':              '📅 EMI',
+    };
+    const typeLabel = typeLabels[r.rowType] || '📅 EMI';
+    const emiDisplay = r.emiPaid > 0 ? fmt(r.emiPaid)
+      : r.rowType === 'deferred' ? '<span style="color:var(--accent)">+' + fmt(r.interest) + ' cap.</span>'
+      : r.rowType === 'no-payment' ? '<span style="color:var(--muted)">No payment</span>'
+      : '—';
     return `<tr class="${cls}">
       <td>${r.num}</td>
       <td>${r.monthName}</td>
-      <td><span style="font-size:12px">${typeLabel}</span>${r.disbursed>0?` <span class="holiday-badge" style="background:var(--accent2-light);color:var(--accent2)">+${fmt(r.disbursed)}</span>`:''}</td>
+      <td><span style="font-size:11px">${typeLabel}</span>${r.disbursed>0?` <span class="holiday-badge" style="background:var(--accent2-light);color:var(--accent2)">+${fmt(r.disbursed)}</span>`:''}</td>
       <td class="cr">${fmt(r.openingBal)}</td>
       <td class="cr" style="color:var(--danger)">${fmt(r.interest)}</td>
       <td class="cr" style="color:var(--success)">${r.principalPaid > 0 ? fmt(r.principalPaid) : '—'}</td>
-      <td class="cr" style="font-weight:600">${r.emiPaid > 0 ? fmt(r.emiPaid) : (r.isHoliday && loanConfig.holidayEmi==='none' ? '<span style="color:var(--muted)">Deferred</span>' : '—')}</td>
+      <td class="cr" style="font-weight:600">${emiDisplay}</td>
       <td class="cr" style="${r.isCurrent?'color:var(--success);font-weight:700':''}">${fmt(r.closingBal)}</td>
     </tr>`;
   }).join('');
