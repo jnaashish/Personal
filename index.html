@@ -580,6 +580,19 @@ tbody td:first-child{color:var(--ink);font-weight:500}
     </div>
   </div>
 
+
+  <!-- Loan Adjustments -->
+  <div class="card" id="loan-adj-card" style="display:none">
+    <div class="ch">
+      <div class="ct">Adjustments & One-time Entries</div>
+      <button class="btn bp sm" onclick="om('mo-loan-adj')">＋ Add Entry</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Record additional credits (e.g. partial prepayment, bank refund) or debits (bank charges, penalty, insurance) that affect your outstanding balance.</p>
+    <div id="loan-adj-list">
+      <div class="empty" style="padding:20px"><p>No adjustments yet</p></div>
+    </div>
+  </div>
+
   <!-- Amortisation table -->
   <div class="card" id="loan-amort-card" style="display:none">
     <div class="ch">
@@ -609,6 +622,23 @@ tbody td:first-child{color:var(--ink);font-weight:500}
       </table>
     </div>
   </div>
+
+  <!-- AI Loan Advisor -->
+  <div class="card" id="loan-ai-card" style="display:none">
+    <div class="ch">
+      <div class="ct">🤖 AI Loan Advisor</div>
+      <button class="btn bp sm" id="ai-analyse-btn" onclick="runLoanAI()">✨ Analyse My Loan</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Get personalised recommendations to close your loan faster, reduce total interest, and optimise your repayment strategy — based on your actual loan data.</p>
+    <div id="ai-loan-output" style="display:none">
+      <div id="ai-loan-content" style="font-size:14px;line-height:1.7;color:var(--ink2);white-space:pre-wrap"></div>
+    </div>
+    <div id="ai-loan-loading" style="display:none;text-align:center;padding:24px;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:10px;animation:pulse 1.2s infinite">🤖</div>
+      <div style="font-size:13px">Analysing your loan data…</div>
+    </div>
+  </div>
+
 </section>
 
 </main>
@@ -731,6 +761,35 @@ service cloud.firestore {
     <div class="ma">
       <button class="btn bs" onclick="cm('mo-perm-error')">Close</button>
       <button class="btn bp" onclick="window.open('https://console.firebase.google.com','_blank');cm('mo-perm-error')">Open Firebase Console</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- LOAN ADJUSTMENT MODAL -->
+<div class="mo" id="mo-loan-adj">
+  <div class="modal">
+    <h3>Add Loan Adjustment</h3>
+    <p class="msub">Record any one-time credit or debit that changes your loan balance</p>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd">
+        <label>Type</label>
+        <select id="adj-type">
+          <option value="prepayment">💰 Prepayment / Partial Payment</option>
+          <option value="credit">✅ Bank Credit / Refund</option>
+          <option value="charge">⚠️ Bank Charge / Penalty</option>
+          <option value="insurance">🛡 Insurance Premium Added</option>
+          <option value="other_debit">➕ Other Debit (increases balance)</option>
+          <option value="other_credit">➖ Other Credit (reduces balance)</option>
+        </select>
+      </div>
+      <div class="fd"><label>Date</label><input type="date" id="adj-date"/></div>
+    </div>
+    <div class="fd mt2"><label>Amount (₹)</label><input type="number" id="adj-amount" placeholder="e.g. 50000"/></div>
+    <div class="fd mt2"><label>Notes</label><input id="adj-notes" placeholder="e.g. Prepaid from Diwali bonus, Bank processing fee"/></div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-loan-adj')">Cancel</button>
+      <button class="btn bp" onclick="saveLoanAdj()">✓ Save Entry</button>
     </div>
   </div>
 </div>
@@ -894,7 +953,9 @@ let S = {
     {name:'Plans',icon:'📐'},{name:'Approvals',icon:'✅'},
     {name:'Bills',icon:'🧾'},{name:'Drawings',icon:'✏️'},
     {name:'Photos',icon:'📷'},{name:'Other',icon:'📎'}
-  ]
+  ],
+  loanConfigs:{},   // keyed by source id — persisted to Firebase
+  loanAdjustments:{} // keyed by source id — array of {date,amount,type,notes}
 };
 let pDel=null, expCatFilt='all', expSrcFilt='all', impData=[];
 let db=null, fsUnsubscribe=null, fsConnected=false;
@@ -2224,7 +2285,8 @@ function selectLoan(id, save) {
   document.getElementById('loan-config-name').textContent = src.name;
 
   // Restore saved config or set defaults
-  const saved = JSON.parse(localStorage.getItem('bl_loan_cfg_' + id) || '{}');
+  // Read from S (Firebase-synced) first, then localStorage fallback
+  const saved = (S.loanConfigs && S.loanConfigs[id]) || JSON.parse(localStorage.getItem('bl_loan_cfg_' + id) || '{}');
   document.getElementById('ln-rate').value     = saved.rate     || 8.5;
   document.getElementById('ln-tenure').value   = saved.tenure   || 240;
   document.getElementById('ln-emi-day').value  = saved.emiDay   || 5;
@@ -2259,6 +2321,10 @@ function saveLoanConfig() {
     emiOverride: parseFloat(document.getElementById('ln-emi-override').value) || 0,
   };
   localStorage.setItem('bl_loan_cfg_' + selectedLoanId, JSON.stringify(cfg));
+  // Also persist into S so it syncs via Firebase
+  if(!S.loanConfigs)S.loanConfigs={};
+  S.loanConfigs[selectedLoanId]=cfg;
+  save();
   return cfg;
 }
 
@@ -2271,11 +2337,13 @@ function recalcLoan() {
   loanSchedule = buildAmortisation(src, cfg);
   updateLoanKPIs(src, cfg, loanSchedule);
   renderAmortTable();
+  renderLoanAdj();
   updateHolidayNote(cfg);
 }
 
 // ── Core amortisation engine ──────────────────────────────────
 function buildAmortisation(src, cfg) {
+  const adjByMonth = getAdjByMonth();
   const hist = src.history && src.history.length
     ? src.history
     : [{date: src.date, amount: src.recv, notes: 'Initial'}];
@@ -2341,6 +2409,10 @@ function buildAmortisation(src, cfg) {
     // ── Add disbursements arriving this month ──
     if (disbByMonth[monthKey]) {
       principal += disbByMonth[monthKey];
+    }
+    // ── Apply loan adjustments this month (prepayments reduce, charges increase) ──
+    if (adjByMonth[monthKey]) {
+      principal = Math.max(0, principal + adjByMonth[monthKey]);
     }
 
     // ── Opening balance = principal + any capitalised interest ──
@@ -2501,6 +2573,8 @@ function updateLoanKPIs(src, cfg, rows) {
   document.getElementById('loan-kpi-grid').style.display = 'grid';
   document.getElementById('loan-progress-card').style.display = '';
   document.getElementById('loan-amort-card').style.display = '';
+  document.getElementById('loan-ai-card').style.display = '';
+  document.getElementById('loan-adj-card').style.display = '';
 }
 
 function updateHolidayNote(cfg) {
@@ -2562,6 +2636,188 @@ function renderAmortTable() {
   if (!showAll && loanSchedule.length > rows.length) {
     body.innerHTML += `<tr><td colspan="8" style="text-align:center;padding:12px;color:var(--muted);font-size:12px">Showing ${rows.length} of ${loanSchedule.length} months — <label style="cursor:pointer;color:var(--accent);font-weight:600"><input type="checkbox" id="ln-show-all" onchange="renderAmortTable()" style="width:auto"/> Show all</label></td></tr>`;
   }
+}
+
+
+
+// ━━━ AI LOAN ADVISOR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function runLoanAI(){
+  const src=S.sources.find(s=>s.id===selectedLoanId);
+  if(!src||!loanSchedule.length){toast('Calculate loan first','e');return;}
+
+  const btn=document.getElementById('ai-analyse-btn');
+  const loading=document.getElementById('ai-loan-loading');
+  const output=document.getElementById('ai-loan-output');
+  const content=document.getElementById('ai-loan-content');
+  btn.disabled=true;btn.textContent='Analysing…';
+  loading.style.display='';output.style.display='none';content.textContent='';
+
+  // Build a rich context summary for Claude
+  const today=new Date();
+  const todayYM=today.getFullYear()*12+today.getMonth();
+  const pastRows=loanSchedule.filter(r=>r.isPast||r.isCurrent);
+  const totalInterest=loanSchedule.reduce((s,r)=>s+r.interest,0);
+  const accruedInt=pastRows.reduce((s,r)=>s+r.interest,0);
+  const totalPaid=pastRows.reduce((s,r)=>s+r.emiPaid,0);
+  const principalPaid=pastRows.reduce((s,r)=>s+r.principalPaid,0);
+  const currentRow=loanSchedule.find(r=>r.isCurrent)||pastRows[pastRows.length-1];
+  const outstandingBal=currentRow?currentRow.closingBal:src.recv;
+  const adjs=(S.loanAdjustments&&S.loanAdjustments[selectedLoanId])||[];
+  const prepayments=adjs.filter(a=>a.type==='prepayment');
+  const remainingMonths=loanSchedule.filter(r=>!r.isPast&&!r.isCurrent).length;
+  const remainingInterest=loanSchedule.filter(r=>!r.isPast&&!r.isCurrent).reduce((s,r)=>s+r.interest,0);
+  const stdEMI=loanSchedule.find(r=>r.rowType==='emi')?.emiPaid||0;
+  const monthlyIncome=0; // not tracked — AI will ask user to consider
+
+  const loanContext=[
+    'LOAN SUMMARY (BuildLedger Construction Loan Tracker)',
+    '====================================================',
+    'Loan Source: '+src.name,
+    'Total Sanctioned: Rs.'+src.total.toLocaleString('en-IN'),
+    'Total Disbursed: Rs.'+src.recv.toLocaleString('en-IN'),
+    'Interest Rate: '+loanConfig.rate+'% p.a. ('+(loanConfig.rate/12).toFixed(3)+'% per month)',
+    'Original Tenure: '+loanConfig.tenure+' months ('+(loanConfig.tenure/12).toFixed(1)+' years)',
+    'Holiday Period: '+(loanConfig.holiday||0)+' months (mode: '+(loanConfig.holidayEmi||'none')+')',
+    'Standard EMI: Rs.'+stdEMI.toLocaleString('en-IN')+'/month',
+    'EMI Day: '+(loanConfig.emiDay||5)+'th of each month',
+    '',
+    'CURRENT STATUS (as of '+today.toLocaleDateString('en-IN',{month:'long',year:'numeric'})+')',
+    'Outstanding Balance: Rs.'+outstandingBal.toLocaleString('en-IN'),
+    'Months Completed: '+pastRows.length,
+    'Months Remaining: '+remainingMonths,
+    'Principal Repaid: Rs.'+principalPaid.toLocaleString('en-IN'),
+    'Total Interest Accrued: Rs.'+accruedInt.toLocaleString('en-IN'),
+    'Total Interest Remaining: Rs.'+remainingInterest.toLocaleString('en-IN'),
+    'Total Lifetime Interest: Rs.'+totalInterest.toLocaleString('en-IN'),
+    '',
+    'PREPAYMENTS: '+prepayments.length+' made',
+    prepayments.length ? prepayments.map(p=>'  - '+fd(p.date)+': Rs.'+p.amount.toLocaleString('en-IN')+' ('+(p.notes||'')+')'  ).join('\n') : '  None so far',
+    '',
+    'DISBURSEMENTS:',
+    (src.history||[]).map(h=>'  - '+fd(h.date)+': Rs.'+h.amount.toLocaleString('en-IN')+' ('+(h.notes||'')+')'  ).join('\n')
+  ].join('\n');
+
+  const prompt=`You are a personal loan advisor helping an Indian homeowner manage their construction home loan. Here is their loan data:
+
+${loanContext}
+
+Please provide a detailed, actionable analysis covering:
+
+1. **Current Loan Health** — Brief assessment of where they stand (% complete, interest already paid vs remaining, etc.)
+
+2. **Strategies to Close the Loan Faster** — Give 3-4 specific, numbered strategies with concrete numbers. E.g. "If you pay ₹X extra per month, you will close X months earlier and save ₹Y in interest." Calculate using reducing balance method.
+
+3. **How to Reduce Total Interest** — Focus on prepayment impact. Calculate: what happens if they make a one-time prepayment of ₹1L, ₹2L, ₹5L right now? Show months saved and interest saved for each scenario.
+
+4. **Optimal Prepayment Timing** — Explain why prepayments in early years save more interest than later years (with their specific numbers).
+
+5. **EMI Top-up Strategy** — What if they increase EMI by ₹2,000, ₹5,000, ₹10,000 per month? Show the impact on tenure and total interest for each.
+
+6. **One Practical Action for This Month** — A single most impactful thing they can do right now.
+
+Use Indian number formatting (lakhs/crores). Be specific with numbers, not generic advice. Keep tone warm and encouraging, like a trusted financial advisor.`;
+
+  try{
+    const response=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1500,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data=await response.json();
+    const text=data.content?.[0]?.text||'No response received.';
+    // Render with basic markdown-like formatting
+    content.innerHTML=text
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/^(\d+)\.\s+\*\*(.+?)\*\*/gm,'<div style="margin-top:14px;font-weight:700;color:var(--ink);font-size:14px">$1. $2</div>')
+      .replace(/^#{1,3}\s+(.+)$/gm,'<div style="margin-top:16px;margin-bottom:6px;font-weight:700;color:var(--ink);font-size:15px;border-bottom:1px solid var(--border);padding-bottom:4px">$1</div>')
+      .replace(/\n/g,'<br>');
+    loading.style.display='none';
+    output.style.display='';
+  }catch(e){
+    content.textContent='AI analysis failed: '+e.message+'. Please try again.';
+    loading.style.display='none';
+    output.style.display='';
+  }
+  btn.disabled=false;btn.textContent='✨ Re-analyse';
+}
+
+// ━━━ LOAN ADJUSTMENTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function saveLoanAdj(){
+  const type=document.getElementById('adj-type').value;
+  const date=document.getElementById('adj-date').value;
+  const amount=parseFloat(document.getElementById('adj-amount').value)||0;
+  const notes=document.getElementById('adj-notes').value.trim();
+  if(!date){toast('Select a date','e');return;}
+  if(amount<=0){toast('Enter a valid amount','e');return;}
+  if(!selectedLoanId){toast('No loan selected','e');return;}
+  if(!S.loanAdjustments)S.loanAdjustments={};
+  if(!S.loanAdjustments[selectedLoanId])S.loanAdjustments[selectedLoanId]=[];
+  S.loanAdjustments[selectedLoanId].push({id:uid(),type,date,amount,notes});
+  S.loanAdjustments[selectedLoanId].sort((a,b)=>a.date.localeCompare(b.date));
+  save();cm('mo-loan-adj');
+  // Clear form
+  document.getElementById('adj-amount').value='';
+  document.getElementById('adj-notes').value='';
+  recalcLoan();
+  toast('✓ Adjustment saved');
+}
+
+function delLoanAdj(adjId){
+  if(!selectedLoanId||!S.loanAdjustments?.[selectedLoanId])return;
+  S.loanAdjustments[selectedLoanId]=S.loanAdjustments[selectedLoanId].filter(a=>a.id!==adjId);
+  save();recalcLoan();toast('Adjustment deleted');
+}
+
+function renderLoanAdj(){
+  const card=document.getElementById('loan-adj-card');
+  const list=document.getElementById('loan-adj-list');
+  if(!card||!list)return;
+  card.style.display='';
+  // Set default date
+  const dateEl=document.getElementById('adj-date');
+  if(dateEl&&!dateEl.value)dateEl.value=new Date().toISOString().split('T')[0];
+
+  const adjs=(S.loanAdjustments&&S.loanAdjustments[selectedLoanId])||[];
+  if(!adjs.length){
+    list.innerHTML='<div class="empty" style="padding:20px"><p>No adjustments yet</p></div>';
+    return;
+  }
+  const typeLabels={
+    'prepayment':'💰 Prepayment','credit':'✅ Bank Credit',
+    'charge':'⚠️ Bank Charge','insurance':'🛡 Insurance',
+    'other_debit':'➕ Other Debit','other_credit':'➖ Other Credit'
+  };
+  const isDebit=t=>['charge','insurance','other_debit'].includes(t);
+  list.innerHTML=`<table class="amort-table"><thead><tr><th>Date</th><th>Type</th><th>Notes</th><th class="cr">Amount</th><th></th></tr></thead><tbody>`+
+    adjs.map(a=>`<tr>
+      <td class="mono" style="font-size:12px">${fd(a.date)}</td>
+      <td>${typeLabels[a.type]||a.type}</td>
+      <td style="font-size:12px;color:var(--muted)">${a.notes||'—'}</td>
+      <td class="cr" style="color:${isDebit(a.type)?'var(--danger)':'var(--success)'}">
+        ${isDebit(a.type)?'+':'-'}${fmt(a.amount)}
+      </td>
+      <td><button class="btn bd sm" onclick="delLoanAdj('${a.id}')">×</button></td>
+    </tr>`).join('')+
+  '</tbody></table>';
+}
+
+// Get adjustments as a map {YYYY-MM: net_delta} for the amortisation engine
+// Credits (prepayment/credit) reduce balance (negative delta)
+// Debits (charge/insurance) increase balance (positive delta)
+function getAdjByMonth(){
+  const adjs=(S.loanAdjustments&&S.loanAdjustments[selectedLoanId])||[];
+  const byMonth={};
+  const isDebit=t=>['charge','insurance','other_debit'].includes(t);
+  adjs.forEach(a=>{
+    const key=a.date.substring(0,7);
+    const delta=isDebit(a.type)?a.amount:-a.amount; // positive = increases balance
+    byMonth[key]=(byMonth[key]||0)+delta;
+  });
+  return byMonth;
 }
 
 // ━━━ GOOGLE DRIVE DAILY BACKUP ━━━━━━━━━━━━━━━━━━━━━━━━━━━
