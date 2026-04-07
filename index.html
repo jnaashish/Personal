@@ -518,9 +518,16 @@ tbody td:first-child{color:var(--ink);font-weight:500}
   <!-- Step 2: Loan config -->
   <div class="card" id="loan-config-card" style="display:none">
     <div class="ch">
-      <div class="ct">Loan Configuration <span id="loan-config-name" style="color:var(--accent2)"></span></div>
-      <button class="btn bs sm" onclick="resetLoanSelection()">← Change Loan</button>
+      <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="toggleLoanConfig()">
+        <div class="ct">Loan Configuration <span id="loan-config-name" style="color:var(--accent2)"></span></div>
+        <span id="ln-cfg-arrow" style="font-size:12px;color:var(--muted);transition:transform .2s">▼</span>
+      </div>
+      <div class="flex gap2">
+        <button class="btn bs sm" onclick="toggleLoanConfig()" id="ln-cfg-toggle-btn">Collapse</button>
+        <button class="btn bs sm" onclick="resetLoanSelection()">← Change Loan</button>
+      </div>
     </div>
+    <div id="ln-cfg-body">
     <div class="loan-config-grid">
       <div class="fd"><label>Interest Rate (% p.a.)</label><input type="number" id="ln-rate" value="8.5" step="0.05" min="1" max="30" oninput="recalcLoan()"/></div>
       <div class="fd"><label>Loan Tenure (months)</label><input type="number" id="ln-tenure" value="240" min="1" max="360" oninput="recalcLoan()"/></div>
@@ -552,16 +559,19 @@ tbody td:first-child{color:var(--ink);font-weight:500}
       <div class="fd"><label>&nbsp;</label><div id="ln-emi-preview" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--muted)">Auto-calculated EMI will show here</div></div>
     </div>
     <div class="info-box mt2" id="loan-holiday-note" style="margin-top:14px;display:none"></div>
+    </div><!-- end ln-cfg-body -->
   </div>
 
   <!-- Summary KPIs -->
-  <div class="loan-summary-grid" id="loan-kpi-grid" style="display:none">
+  <div class="loan-summary-grid" id="loan-kpi-grid" style="display:none;grid-template-columns:repeat(4,1fr)">
     <div class="loan-kpi lk1"><div class="kl">Total Sanctioned</div><div class="kv" id="lk-sanctioned">₹0</div><div class="ks">full loan amount</div></div>
-    <div class="loan-kpi lk2"><div class="kl">Disbursed So Far</div><div class="kv" id="lk-disbursed">₹0</div><div class="ks">received till today</div></div>
-    <div class="loan-kpi lk3"><div class="kl">Total Interest Cost</div><div class="kv" id="lk-total-interest">₹0</div><div class="ks">full tenure</div></div>
-    <div class="loan-kpi lk4"><div class="kl">Interest Accrued</div><div class="kv" id="lk-accrued">₹0</div><div class="ks">till today</div></div>
+    <div class="loan-kpi lk2"><div class="kl">Total Disbursed</div><div class="kv" id="lk-disbursed">₹0</div><div class="ks" id="lk-disb-pct"></div></div>
+    <div class="loan-kpi lk4"><div class="kl">Yet to be Disbursed</div><div class="kv" id="lk-pending">₹0</div><div class="ks">undisbursed amount</div></div>
+    <div class="loan-kpi lk6"><div class="kl">Outstanding Balance</div><div class="kv" id="lk-balance">₹0</div><div class="ks">principal remaining today</div></div>
     <div class="loan-kpi lk5"><div class="kl">EMIs Paid</div><div class="kv" id="lk-emis-paid">0</div><div class="ks"><span id="lk-principal-paid"></span></div></div>
-    <div class="loan-kpi lk6"><div class="kl">Outstanding Balance</div><div class="kv" id="lk-balance">₹0</div><div class="ks">principal remaining</div></div>
+    <div class="loan-kpi lk3"><div class="kl">Total Payable (Full Tenure)</div><div class="kv" id="lk-total-payable">₹0</div><div class="ks" id="lk-interest-label"></div></div>
+    <div class="loan-kpi" style="--c:#9c3a9c"><div class="kl">Next EMI</div><div class="kv" id="lk-next-emi">₹0</div><div class="ks" id="lk-next-emi-date"></div></div>
+    <div class="loan-kpi" style="--c:#3a6bc1"><div class="kl">Interest Saved (Prepayments)</div><div class="kv" id="lk-int-saved">₹0</div><div class="ks" id="lk-prepaid-sub"></div></div>
   </div>
 
   <!-- Progress bar -->
@@ -2229,6 +2239,19 @@ async function deleteDoc(id){
 
 
 
+
+// ━━━ LOAN CONFIG TOGGLE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let loanCfgExpanded = true;
+function toggleLoanConfig(){
+  loanCfgExpanded = !loanCfgExpanded;
+  const body = document.getElementById('ln-cfg-body');
+  const arrow = document.getElementById('ln-cfg-arrow');
+  const btn = document.getElementById('ln-cfg-toggle-btn');
+  if(body){ body.style.display = loanCfgExpanded ? '' : 'none'; }
+  if(arrow){ arrow.style.transform = loanCfgExpanded ? '' : 'rotate(-90deg)'; }
+  if(btn){ btn.textContent = loanCfgExpanded ? 'Collapse' : 'Expand'; }
+}
+
 // ━━━ LOAN TRACKER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Loan calculation logic:
 // 1. Holiday period = months from first disbursement where no principal repayment
@@ -2357,13 +2380,51 @@ function buildAmortisation(src, cfg) {
   const firstDisb = hist[0].date;
   if (!firstDisb) return [];
 
-  // Disbursements by YYYY-MM
+  // Disbursements: track each tranche with its exact day for day-accurate interest
+  // disbByMonth[YYYY-MM] = [{day, amount}]
   const disbByMonth = {};
   hist.forEach(h => {
     if (!h.date) return;
     const key = h.date.substring(0, 7);
-    disbByMonth[key] = (disbByMonth[key] || 0) + h.amount;
+    const day = parseInt(h.date.split('-')[2]) || 1;
+    if (!disbByMonth[key]) disbByMonth[key] = [];
+    disbByMonth[key].push({day, amount: h.amount});
   });
+
+  // Helper: days in a given month
+  function daysInMonth(y, m){ return new Date(y, m, 0).getDate(); } // m is 1-based
+
+  // Calculate day-accurate interest for one month
+  // existingPrincipal: balance at start of month (from previous month closing)
+  // newDisb: array of {day, amount} disbursed this month
+  // adjDelta: net adjustment this month (+ve increases balance)
+  // monthlyRate: annual_rate/1200
+  function calcDayAccurateInterest(existingPrincipal, newDisb, adjDelta, yearNum, monthNum1, capIntIn) {
+    const daysTotal = daysInMonth(yearNum, monthNum1);
+    const dailyRate = (cfg.rate / 100) / 365;
+    let interest = 0;
+
+    // Existing principal (from opening balance inc. cap interest) — active all month
+    interest += (existingPrincipal + capIntIn) * dailyRate * daysTotal;
+
+    // Each new disbursement: active from its day to end of month
+    (newDisb||[]).forEach(d => {
+      const daysActive = daysTotal - d.day + 1; // inclusive of disbursement day
+      interest += d.amount * dailyRate * daysActive;
+    });
+
+    // Adjustment: if it's a prepayment (negative), interest saved from that day
+    // For simplicity, apply adjustment at start of month (conservative)
+    if (adjDelta < 0) {
+      // Credit reduces interest: assume applied at start of month
+      interest += adjDelta * dailyRate * daysTotal; // adjDelta is negative so this reduces
+    } else if (adjDelta > 0) {
+      // Debit increases balance: assume applied at start of month
+      interest += adjDelta * dailyRate * daysTotal;
+    }
+
+    return Math.round(Math.max(0, interest));
+  }
 
   const [sy, sm] = firstDisb.split('-').map(Number);
   const today = new Date();
@@ -2406,21 +2467,22 @@ function buildAmortisation(src, cfg) {
     const isPast    = monthYM < todayYM;
     const isCurrent = monthYM === todayYM;
 
-    // ── Add disbursements arriving this month ──
-    if (disbByMonth[monthKey]) {
-      principal += disbByMonth[monthKey];
-    }
-    // ── Apply loan adjustments this month (prepayments reduce, charges increase) ──
-    if (adjByMonth[monthKey]) {
-      principal = Math.max(0, principal + adjByMonth[monthKey]);
-    }
-
-    // ── Opening balance = principal + any capitalised interest ──
+    // ── Opening balance BEFORE this month's activity ──
     const openingBal = principal + capInt;
-    if (openingBal <= 0 && m > 0) break; // fully repaid
+    if (openingBal <= 0 && m > 0 && !disbByMonth[monthKey]) break; // fully repaid
 
-    // ── Monthly interest on opening balance ──
-    const interest = Math.round(openingBal * monthlyRate);
+    // ── Day-accurate interest for this month ──
+    const thisMonthDisb = disbByMonth[monthKey] || [];
+    const adjDelta = adjByMonth[monthKey] || 0;
+    const interest = calcDayAccurateInterest(principal, thisMonthDisb, adjDelta, yearNum, monthNum+1, capInt);
+
+    // ── Add disbursements to principal (at end of interest calc, for next month) ──
+    thisMonthDisb.forEach(d => { principal += d.amount; });
+
+    // ── Apply loan adjustments this month ──
+    if (adjDelta !== 0) {
+      principal = Math.max(0, principal + adjDelta);
+    }
 
     // ── Decide if payment happens this month ──
     // EMI start date: no payment before emiStartYM (if set)
@@ -2505,7 +2567,7 @@ function buildAmortisation(src, cfg) {
       principalPaid: Math.round(principalPaid),
       emiPaid: Math.round(emiPaid),
       closingBal,
-      disbursed: disbByMonth[monthKey] || 0,
+      disbursed: (disbByMonth[monthKey]||[]).reduce((s,d)=>s+d.amount,0),
     });
 
     if (closingBal <= 0) break;
@@ -2542,13 +2604,45 @@ function updateLoanKPIs(src, cfg, rows) {
   const lastRow = rows[rows.length - 1];
   const endDate = lastRow ? lastRow.monthName : '—';
 
+  // ── New KPI calculations ──
+  const totalPayable = rows.reduce((s,r) => s + r.emiPaid, 0);
+  const totalInterestFull = totalPayable - (rows.reduce((s,r) => s + r.principalPaid, 0));
+  const pending = Math.max(0, src.total - src.recv);
+  const disbPct = src.total > 0 ? Math.round(src.recv / src.total * 100) : 0;
+
+  // Next EMI
+  const futureRows = rows.filter(r => !r.isPast);
+  const nextEMIRow = futureRows[0];
+  const nextEMIAmt = nextEMIRow ? nextEMIRow.emiPaid : 0;
+  const nextEMIDate = nextEMIRow ? (String(cfg.emiDay||5).padStart(2,'0') + ' ' + nextEMIRow.monthName) : '—';
+
+  // Interest saved by prepayments — compare current schedule vs no-prepayment baseline
+  const adjs = (S.loanAdjustments && S.loanAdjustments[selectedLoanId]) || [];
+  const totalPrepaid = adjs.filter(a=>['prepayment','credit','other_credit'].includes(a.type)).reduce((s,a)=>s+a.amount,0);
+  // Simplified savings estimate: prepayment × rate × remaining_months / 12
+  const avgRemainingMonths = futureRows.length / 2;
+  const intSaved = Math.round(totalPrepaid * (cfg.rate/100/12) * avgRemainingMonths);
+
   document.getElementById('lk-sanctioned').textContent = fmt(src.total);
   document.getElementById('lk-disbursed').textContent = fmt(src.recv);
-  document.getElementById('lk-total-interest').textContent = fmt(totalInterest);
-  document.getElementById('lk-accrued').textContent = fmt(accruedInt);
+  const disbPctEl = document.getElementById('lk-disb-pct');
+  if(disbPctEl) disbPctEl.textContent = disbPct + '% of sanctioned';
+  document.getElementById('lk-pending').textContent = fmt(pending);
+  document.getElementById('lk-balance').textContent = fmt(outstandingBal);
   document.getElementById('lk-emis-paid').textContent = emisPaid;
   document.getElementById('lk-principal-paid').textContent = fmt(totalPrincipalPaid) + ' principal paid';
-  document.getElementById('lk-balance').textContent = fmt(outstandingBal);
+  document.getElementById('lk-total-payable').textContent = fmt(totalPayable);
+  const intLabel = document.getElementById('lk-interest-label');
+  if(intLabel) intLabel.textContent = 'incl. ' + fmt(totalInterestFull) + ' interest';
+  const nextEmiEl = document.getElementById('lk-next-emi');
+  if(nextEmiEl) nextEmiEl.textContent = nextEMIAmt > 0 ? fmt(nextEMIAmt) : '—';
+  const nextEmiDateEl = document.getElementById('lk-next-emi-date');
+  if(nextEmiDateEl) nextEmiDateEl.textContent = nextEMIDate;
+  const intSavedEl = document.getElementById('lk-int-saved');
+  if(intSavedEl) intSavedEl.textContent = intSaved > 0 ? fmt(intSaved) : '₹0';
+  const prepaidSubEl = document.getElementById('lk-prepaid-sub');
+  if(prepaidSubEl) prepaidSubEl.textContent = totalPrepaid > 0 ? fmt(totalPrepaid) + ' prepaid total' : 'No prepayments yet';
+
   document.getElementById('loan-progress-bar').style.width = pct + '%';
   document.getElementById('loan-progress-label').textContent = pct + '% repaid · ₹' + (totalPrincipalPaid/100000).toFixed(1) + 'L of ₹' + (src.total/100000).toFixed(1) + 'L';
   document.getElementById('lk-start-date').textContent = fd(firstDate) || '—';
@@ -2634,7 +2728,10 @@ function renderAmortTable() {
   }).join('');
 
   if (!showAll && loanSchedule.length > rows.length) {
-    body.innerHTML += `<tr><td colspan="8" style="text-align:center;padding:12px;color:var(--muted);font-size:12px">Showing ${rows.length} of ${loanSchedule.length} months — <label style="cursor:pointer;color:var(--accent);font-weight:600"><input type="checkbox" id="ln-show-all" onchange="renderAmortTable()" style="width:auto"/> Show all</label></td></tr>`;
+    body.innerHTML += `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--muted);font-size:13px">
+      Showing ${rows.length} of ${loanSchedule.length} months &nbsp;·&nbsp;
+      <button onclick="document.getElementById('ln-show-all').checked=true;renderAmortTable()" style="background:none;border:none;cursor:pointer;color:var(--accent);font-weight:700;font-size:13px;font-family:inherit">Show all ${loanSchedule.length} months →</button>
+    </td></tr>`;
   }
 }
 
@@ -2718,11 +2815,16 @@ Please provide a detailed, actionable analysis covering:
 Use Indian number formatting (lakhs/crores). Be specific with numbers, not generic advice. Keep tone warm and encouraging, like a trusted financial advisor.`;
 
   try{
+    // Note: Direct Anthropic API calls from browser require the API proxy
+    // The app uses the built-in Claude API access available in Claude.ai artifacts
     const response=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{
+        'Content-Type':'application/json',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'claude-sonnet-4-6',
         max_tokens:1500,
         messages:[{role:'user',content:prompt}]
       })
