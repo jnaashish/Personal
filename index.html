@@ -2502,26 +2502,31 @@ function buildAmortisation(src, cfg) {
     const openingBal = principal + capInt;
     if (openingBal <= 0 && m > 0 && !disbByMonth[monthKey]) break; // fully repaid
 
+    // ── Decide if payment is blocked this month ──
+    // MUST be declared before it is used below (fixes temporal dead zone bug)
+    const paymentBlocked = emiStartYM !== null && monthYM < emiStartYM;
+
     // ── Day-accurate interest for this month ──
     const thisMonthDisb = disbByMonth[monthKey] || [];
     const adjDelta = adjByMonth[monthKey] || 0;
     const adjDetail = adjByMonthDetail[monthKey] || null;
-    // For interest calc: EMI reduces balance on emiDay, affecting segment calculation
-    // But only if payment is NOT blocked and balance exists
-    const thisMonthEmiAmt = (paymentBlocked || openingBal <= 0) ? 0 : (isHoliday ? (holidayMode==='none'?0:stdEMI) : stdEMI);
-    const interest = calcDayAccurateInterest(principal, thisMonthDisb, adjDetail, emiDay, Math.min(thisMonthEmiAmt, principal+capInt), yearNum, monthNum+1, capInt);
+    // Include EMI as a balance-change event in the segment calc,
+    // but only when payment will actually be made this month
+    const thisMonthEmiAmt = (paymentBlocked || openingBal <= 0) ? 0
+      : (isHoliday ? (holidayMode === 'none' ? 0 : stdEMI) : stdEMI);
+    const interest = calcDayAccurateInterest(
+      principal, thisMonthDisb, adjDetail,
+      emiDay, Math.min(thisMonthEmiAmt, principal + capInt),
+      yearNum, monthNum + 1, capInt
+    );
 
-    // ── Add disbursements to principal (at end of interest calc, for next month) ──
+    // ── Add disbursements to principal (AFTER interest calc) ──
     thisMonthDisb.forEach(d => { principal += d.amount; });
 
     // ── Apply loan adjustments this month ──
     if (adjDelta !== 0) {
       principal = Math.max(0, principal + adjDelta);
     }
-
-    // ── Decide if payment happens this month ──
-    // EMI start date: no payment before emiStartYM (if set)
-    const paymentBlocked = emiStartYM !== null && monthYM < emiStartYM;
 
     let emiPaid = 0, principalPaid = 0, intPaid = 0;
     let rowType = '';
