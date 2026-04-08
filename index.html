@@ -252,6 +252,14 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 .holiday-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:var(--accent-light);color:var(--accent);font-family:'IBM Plex Mono',monospace}
 @media(max-width:768px){
   .loan-summary-grid{grid-template-columns:1fr 1fr !important}
+  .loan-config-grid{grid-template-columns:1fr !important}
+  .loan-kpi .kv{font-size:17px}
+  .loan-kpi{padding:14px 10px}
+  .amort-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .amort-table,.amort-table#stmt-table{font-size:11px;min-width:500px}
+  .amort-table th,.amort-table td{padding:5px 6px}
+  .loan-select-card{padding:12px}
+  .lsc-name{font-size:13px}
   .loan-config-grid{grid-template-columns:1fr}
   .loan-kpi .kv{font-size:16px}
   .loan-kpi{padding:12px 10px}
@@ -2393,38 +2401,58 @@ function buildAmortisation(src, cfg) {
   // Helper: days in a given month
   function daysInMonth(y, m){ return new Date(y, m, 0).getDate(); } // m is 1-based
 
-  // Calculate day-accurate interest: build event timeline within month
-  // Events: disbursements + adjustments each happen on a specific day
-  // Interest = sum of (balance_in_segment × dailyRate × days_in_segment)
-  // This exactly matches the bank statement screenshot calculation
-  function calcDayAccurateInterest(existingPrincipal, newDisb, adjThisMonth, yearNum, monthNum1, capIntIn) {
+  // Day-accurate interest calculation matching bank statement logic:
+  // Build a timeline of ALL balance-changing events in the month (disbursements,
+  // EMI payments, adjustments) sorted by day.
+  // For each segment between events: interest += balance × (rate/365) × segment_days
+  //
+  // Bank example (Jan, rate 7.15%):
+  // Balance 1999999 days 1-12 (12 days), EMI paid on 13th → balance 1854999 days 13-31 (19 days)
+  // = 1999999×(7.15/365/100)×12 + 1854999×(7.15/365/100)×19 = 4701.4 + 6904.2 = 11605.6 ✓
+  //
+  // Key rule: segment_days = next_event_day - current_event_day
+  // Last segment runs from last event day to end of month (inclusive)
+  function calcDayAccurateInterest(openingPrincipal, newDisb, adjThisMonth, emiDay, emiAmt, yearNum, monthNum1, capIntIn) {
     const daysTotal = daysInMonth(yearNum, monthNum1);
     const dailyRate = (cfg.rate / 100) / 365;
 
-    // Build sorted list of balance-change events within this month
-    // Each event: {day, delta}
+    // Build sorted list of ALL balance-change events in this month {day, delta}
+    // delta > 0 = increases outstanding (disbursement, charge)
+    // delta < 0 = decreases outstanding (EMI payment, prepayment)
     const events = [];
-    (newDisb||[]).forEach(d => events.push({day: d.day, delta: d.amount}));
-    // Adjustments with exact day (if available in adjByMonthDetail)
-    if(adjThisMonth && adjThisMonth.length) {
-      adjThisMonth.forEach(a => events.push({day: a.day||1, delta: a.delta}));
+
+    // Disbursements — increase outstanding balance
+    (newDisb||[]).forEach(d => events.push({day: d.day, delta: +d.amount, desc:'disb'}));
+
+    // EMI payment — decreases outstanding balance (if applicable this month)
+    if(emiAmt > 0 && emiDay >= 1 && emiDay <= daysTotal) {
+      events.push({day: emiDay, delta: -emiAmt, desc:'emi'});
     }
+
+    // Adjustments with exact day
+    if(adjThisMonth && adjThisMonth.length) {
+      adjThisMonth.forEach(a => events.push({day: a.day||1, delta: a.delta, desc:'adj'}));
+    }
+
+    // Sort by day
     events.sort((a,b) => a.day - b.day);
 
-    // Walk through segments
-    let balance = existingPrincipal + capIntIn;
-    let prevDay = 1;
+    // Walk segments: balance runs from day 1 until first event, then changes
+    let balance = openingPrincipal + capIntIn;
     let interest = 0;
+    let prevDay = 1;
 
     for(const ev of events) {
-      const segDays = ev.day - prevDay; // days from prevDay to event day (exclusive)
+      // Days BEFORE this event (prevDay to ev.day - 1, inclusive)
+      const segDays = ev.day - prevDay;
       if(segDays > 0) interest += balance * dailyRate * segDays;
       balance += ev.delta;
+      balance = Math.max(0, balance);
       prevDay = ev.day;
     }
-    // Remaining days after last event to end of month
+    // Days from last event to end of month (inclusive)
     const remainDays = daysTotal - prevDay + 1;
-    interest += balance * dailyRate * remainDays;
+    if(remainDays > 0) interest += balance * dailyRate * remainDays;
 
     return Math.round(Math.max(0, interest));
   }
@@ -2478,7 +2506,10 @@ function buildAmortisation(src, cfg) {
     const thisMonthDisb = disbByMonth[monthKey] || [];
     const adjDelta = adjByMonth[monthKey] || 0;
     const adjDetail = adjByMonthDetail[monthKey] || null;
-    const interest = calcDayAccurateInterest(principal, thisMonthDisb, adjDetail, yearNum, monthNum+1, capInt);
+    // For interest calc: EMI reduces balance on emiDay, affecting segment calculation
+    // But only if payment is NOT blocked and balance exists
+    const thisMonthEmiAmt = (paymentBlocked || openingBal <= 0) ? 0 : (isHoliday ? (holidayMode==='none'?0:stdEMI) : stdEMI);
+    const interest = calcDayAccurateInterest(principal, thisMonthDisb, adjDetail, emiDay, Math.min(thisMonthEmiAmt, principal+capInt), yearNum, monthNum+1, capInt);
 
     // ── Add disbursements to principal (at end of interest calc, for next month) ──
     thisMonthDisb.forEach(d => { principal += d.amount; });
