@@ -810,6 +810,29 @@ service cloud.firestore {
   </div>
 </div>
 
+
+<!-- EDIT TRANCHE MODAL -->
+<div class="mo" id="mo-edit-tranche">
+  <div class="modal">
+    <h3>Edit Disbursement</h3>
+    <p class="msub">Update the amount, date or notes for this receipt entry</p>
+    <input type="hidden" id="et-src-id"/>
+    <input type="hidden" id="et-idx"/>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+      <span style="color:var(--muted)">Source: </span><strong id="et-src-name" style="color:var(--ink)">—</strong>
+    </div>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd"><label>Amount Received (₹)</label><input type="number" id="et-amount" placeholder="e.g. 1000000"/></div>
+      <div class="fd"><label>Date Received</label><input type="date" id="et-date"/></div>
+    </div>
+    <div class="fd mt2"><label>Notes</label><input id="et-notes" placeholder="e.g. Second tranche, Jan disbursement…"/></div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-edit-tranche')">Cancel</button>
+      <button class="btn bp" onclick="saveEditTranche()">✓ Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- UPLOAD DOCUMENT MODAL -->
 <div class="mo" id="mo-upload-doc">
   <div class="modal">
@@ -1057,6 +1080,77 @@ function openUpdSrc(id){
   document.getElementById('us-hint').style.display=src.recv>=src.total?'':'none';
   om('mo-updsrc');
 }
+
+// ━━━ TRANCHE EDIT / DELETE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function openEditTranche(srcId, idx) {
+  const src = S.sources.find(s => s.id === srcId);
+  if (!src || !src.history || !src.history[idx]) return;
+  const h = src.history[idx];
+  document.getElementById('et-src-id').value = srcId;
+  document.getElementById('et-idx').value = idx;
+  document.getElementById('et-src-name').textContent = src.name;
+  document.getElementById('et-amount').value = h.amount;
+  document.getElementById('et-date').value = h.date || '';
+  document.getElementById('et-notes').value = h.notes || '';
+  om('mo-edit-tranche');
+}
+
+function saveEditTranche() {
+  const srcId = document.getElementById('et-src-id').value;
+  const idx = parseInt(document.getElementById('et-idx').value);
+  const amount = parseFloat(document.getElementById('et-amount').value) || 0;
+  const date = document.getElementById('et-date').value;
+  const notes = document.getElementById('et-notes').value.trim();
+
+  if (amount <= 0) { toast('Enter a valid amount', 'e'); return; }
+  if (!date) { toast('Select a date', 'e'); return; }
+
+  const src = S.sources.find(s => s.id === srcId);
+  if (!src || !src.history || !src.history[idx]) return;
+
+  const oldAmount = src.history[idx].amount;
+  src.history[idx] = { date, amount, notes };
+
+  // Recalculate src.recv as sum of all tranches (keeps it consistent)
+  src.recv = src.history.reduce((s, h) => s + h.amount, 0);
+
+  // If recv exceeds total, expand total
+  if (src.recv > src.total) src.total = src.recv;
+
+  // Sort history by date
+  src.history.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  save();
+  cm('mo-edit-tranche');
+  renderSrc();
+  renderDash();
+  // If loan tracker is open, recalculate
+  if (selectedLoanId === srcId) recalcLoan();
+  toast('✓ Tranche updated');
+}
+
+function delTranche(srcId, idx) {
+  const src = S.sources.find(s => s.id === srcId);
+  if (!src || !src.history || !src.history[idx]) return;
+  const h = src.history[idx];
+  if (!confirm('Delete disbursement of ' + fmt(h.amount) + ' on ' + (fd(h.date) || h.date) + '? This cannot be undone.')) return;
+
+  src.history.splice(idx, 1);
+
+  // Recalculate recv from remaining tranches
+  src.recv = src.history.reduce((s, h) => s + h.amount, 0);
+
+  // If no tranches left, recv = 0
+  if (src.history.length === 0) src.recv = 0;
+
+  save();
+  renderSrc();
+  renderDash();
+  // If loan tracker is open, recalculate
+  if (selectedLoanId === srcId) recalcLoan();
+  toast('Tranche deleted');
+}
+
 function doUpdSrc(){
   const id=document.getElementById('us-id').value;
   const extra=parseFloat(document.getElementById('us-amt').value)||0;
@@ -1096,15 +1190,18 @@ function renderSrc(){
     const hist = src.history||[];
     const trancheHTML = hist.length>0
       ? hist.map((h,i)=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bg2)">
-            <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bg2);gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
               <span style="width:20px;height:20px;border-radius:50%;background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</span>
-              <div>
+              <div style="flex:1;min-width:0">
                 <div style="font-size:13px;font-weight:600;color:var(--ink)">${fmt(h.amount)}</div>
-                ${h.notes?`<div style="font-size:11px;color:var(--muted)">${h.notes}</div>`:''}
+                <div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">${fd(h.date)||'—'}${h.notes?` · ${h.notes}`:''}</div>
               </div>
             </div>
-            <div style="font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-align:right">${fd(h.date)||'—'}</div>
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <button onclick="openEditTranche('${src.id}',${i})" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--ink2);font-family:inherit" title="Edit this tranche">✏️</button>
+              <button onclick="delTranche('${src.id}',${i})" style="background:var(--danger-light);border:1px solid #e8b0b0;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--danger);font-family:inherit" title="Delete this tranche">×</button>
+            </div>
           </div>`).join('')
       : '<div style="font-size:13px;color:var(--muted);padding:10px 0;text-align:center">No receipt entries yet</div>';
 
