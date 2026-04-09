@@ -2733,128 +2733,173 @@ function renderAmortTable() {
   const src = S.sources.find(s => s.id === selectedLoanId);
   const adjs = (S.loanAdjustments && S.loanAdjustments[selectedLoanId]) || [];
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
 
-  // ── Build a flat list of statement lines ──
-  // Each line: {date, desc, debit, credit, balance, isPast, isProjected, isInterest, highlight}
-  const lines = [];
+  // ── STEP 1: Collect all events with date + delta (no running balance yet) ──
+  // Each event: {date, desc, delta, isPast, isCurrent, isProjected, cls}
+  // delta > 0 = balance increases (disbursement, interest, charge)
+  // delta < 0 = balance decreases (EMI, prepayment, credit)
+  const events = [];
   const hist = src.history && src.history.length
     ? src.history
     : [{date: src.date, amount: src.recv, notes: 'Initial'}];
-
-  // Process each month row from loanSchedule
-  let runBal = 0;
   const usedAdjIds = new Set();
+  const adjTypeLabels = {
+    'prepayment':'Prepayment','credit':'Bank Credit / Refund',
+    'charge':'Bank Charge / Penalty','insurance':'Insurance Premium',
+    'other_debit':'Other Debit','other_credit':'Other Credit'
+  };
+  const isAdjDebit = t => ['charge','insurance','other_debit'].includes(t);
 
   for(const row of loanSchedule) {
     const [ry, rm] = row.monthKey.split('-').map(Number);
     const isPast = row.isPast;
     const isCurrent = row.isCurrent;
     const isProjected = !isPast && !isCurrent;
+    const lastDayOfMonth = row.monthKey + '-' + String(daysInMonthStmt(ry, rm)).padStart(2,'0');
 
-    // 1. Disbursements this month (credit — reduces outstanding, increases balance in loan account)
+    // Disbursements — increase balance (bank credits loan account)
     hist.filter(h => h.date && h.date.substring(0,7) === row.monthKey).forEach(h => {
-      runBal += h.amount;
-      lines.push({
+      events.push({
         date: h.date,
-        desc: 'Disbursement' + (h.notes && h.notes !== 'Initial' ? ' / ' + h.notes : ''),
-        debit: 0, credit: h.amount, balance: runBal,
-        isPast, isCurrent, isProjected, cls:'credit-row'
+        desc: 'Disbursement' + (h.notes && h.notes !== 'Initial' ? ' — ' + h.notes : ''),
+        delta: +h.amount,
+        isPast, isCurrent, isProjected, cls:'disb-row'
       });
     });
 
-    // 2. Adjustments this month
-    adjs.filter(a => a.date && a.date.substring(0,7) === row.monthKey && !usedAdjIds.has(a.id)).forEach(a => {
-      usedAdjIds.add(a.id);
-      const isDebit = ['charge','insurance','other_debit'].includes(a.type);
-      const typeLabels = {
-        'prepayment':'Prepayment','credit':'Bank Credit / Refund',
-        'charge':'Bank Charge / Penalty','insurance':'Insurance Premium',
-        'other_debit':'Other Debit','other_credit':'Other Credit'
-      };
-      if(isDebit) {
-        runBal += a.amount;
-        lines.push({date:a.date, desc:(typeLabels[a.type]||a.type)+(a.notes?' — '+a.notes:''), debit:a.amount, credit:0, balance:runBal, isPast,isCurrent,isProjected, cls:'debit-row'});
-      } else {
-        runBal -= a.amount;
-        runBal = Math.max(0, runBal);
-        lines.push({date:a.date, desc:(typeLabels[a.type]||a.type)+(a.notes?' — '+a.notes:''), debit:0, credit:a.amount, balance:runBal, isPast,isCurrent,isProjected, cls:'credit-row'});
+    // Adjustments — exact date, exact delta
+    adjs.filter(a => a.date && a.date.substring(0,7) === row.monthKey && !usedAdjIds.has(a.id))
+      .forEach(a => {
+        usedAdjIds.add(a.id);
+        const delta = isAdjDebit(a.type) ? +a.amount : -a.amount;
+        events.push({
+          date: a.date,
+          desc: (adjTypeLabels[a.type]||a.type) + (a.notes ? ' — ' + a.notes : ''),
+          delta,
+          isPast, isCurrent, isProjected,
+          cls: isAdjDebit(a.type) ? 'debit-row' : 'credit-row'
+        });
+      });
+
+    // EMI / payment — decreases balance; placed on emiDay of month
+    if(row.emiPaid > 0) {
+      const emiDayStr = String(loanConfig.emiDay || 5).padStart(2,'0');
+      // Clamp to last day of month in case emiDay > days in month
+      const daysInM = daysInMonthStmt(ry, rm);
+      const clampedDay = Math.min(loanConfig.emiDay || 5, daysInM);
+      const emiDate = row.monthKey + '-' + String(clampedDay).padStart(2,'0');
+      const emiDesc =
+        row.rowType === 'interest-only'      ? 'Interest Payment (Holiday)' :
+        row.rowType === 'full-emi-holiday'   ? 'EMI Payment (Holiday Period)' :
+        row.rowType === 'no-payment'         ? null :
+        'EMI Payment';
+      if(emiDesc) {
+        events.push({
+          date: emiDate,
+          desc: emiDesc,
+          delta: -row.emiPaid,
+          isPast, isCurrent, isProjected, cls:'credit-row'
+        });
       }
-    });
-
-    // 3. Interest charged (debit — increases balance)
-    if(row.interest > 0) {
-      const intDate = row.monthKey + '-' + String(daysInMonthStmt(ry, rm)).padStart(2,'0'); // last day
-      runBal += row.interest;
-      lines.push({
-        date: intDate,
-        desc: 'Interest Charged',
-        debit: row.interest, credit: 0, balance: runBal,
-        isPast, isCurrent, isProjected, cls:'interest-row'
-      });
     }
 
-    // 4. EMI / payment (credit — reduces balance)
-    if(row.emiPaid > 0) {
-      const emiDay = String(loanConfig.emiDay || 5).padStart(2,'0');
-      const emiDate = row.monthKey + '-' + emiDay;
-      const emiDesc =
-        row.rowType === 'interest-only' ? 'Interest Payment (Holiday)' :
-        row.rowType === 'full-emi-holiday' ? 'EMI Payment (Holiday Period)' :
-        'EMI Payment';
-      runBal -= row.emiPaid;
-      runBal = Math.max(0, runBal);
-      lines.push({
-        date: emiDate,
-        desc: emiDesc,
-        debit: 0, credit: row.emiPaid, balance: runBal,
-        isPast, isCurrent, isProjected, cls:'credit-row'
+    // Interest — shown on last day of month
+    // RULE: Only show if month is fully past (interest has been charged by bank)
+    // Do NOT show for current or future months (as-on-date view)
+    if(row.interest > 0 && isPast) {
+      events.push({
+        date: lastDayOfMonth,
+        desc: 'Interest Charged',
+        delta: +row.interest,
+        isPast, isCurrent: false, isProjected: false, cls:'interest-row'
+      });
+    }
+    // For current month: show interest accrued up to today as a note (informational, no balance change)
+    // This matches bank "as on date" — interest not yet debited
+    if(row.interest > 0 && isCurrent) {
+      events.push({
+        date: todayStr,
+        desc: 'Interest Accruing (not yet charged)',
+        delta: 0, // informational only — does not change balance
+        isPast: false, isCurrent: true, isProjected: false, cls:'interest-row',
+        infoOnly: true, infoAmt: row.interest
       });
     }
   }
 
-  // Sort all lines by date
-  lines.sort((a,b) => a.date.localeCompare(b.date));
+  // ── STEP 2: Sort all events by date, then by type priority within same date ──
+  // Within same date: disbursements first, then EMI, then interest, then charges
+  const typePriority = e => e.cls === 'disb-row' ? 0 : e.cls === 'credit-row' ? 1 : e.cls === 'interest-row' ? 3 : 2;
+  events.sort((a,b) => a.date.localeCompare(b.date) || typePriority(a) - typePriority(b));
 
-  // Filter: show past+current by default, projected only if checkbox ticked
-  const visible = showAll ? lines : lines.filter(l => !l.isProjected);
+  // ── STEP 3: Compute running balance in sorted order ──
+  let runBal = 0;
+  const lines = events.map(e => {
+    if(!e.infoOnly) {
+      runBal += e.delta;
+      runBal = Math.max(0, runBal);
+    }
+    return {...e, balance: runBal};
+  });
+
+  // ── STEP 4: Filter past+current only (default); projected on toggle ──
+  const visible = showAll
+    ? lines
+    : lines.filter(l => !l.isProjected);
   const projCount = lines.filter(l => l.isProjected).length;
 
   if(!visible.length) {
-    body.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No transactions yet</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No transactions yet. Add disbursements and EMI payments to see the statement.</p></div></td></tr>';
     return;
   }
 
+  // ── STEP 5: Render ──
   body.innerHTML = visible.map(l => {
     const dateDisp = fd(l.date) || l.date;
-    const projStyle = l.isProjected ? 'opacity:.65;font-style:italic' : '';
-    const balColor = l.balance > 0 ? '' : 'color:var(--success)';
-    const rowBg = l.isCurrent ? 'background:rgba(58,156,107,.06)' :
-                  l.isProjected ? 'background:rgba(58,107,193,.04)' : '';
-    return '<tr style="' + rowBg + projStyle + '">' +
-      '<td class="mono" style="font-size:12px;white-space:nowrap">' + dateDisp + '</td>' +
-      '<td style="font-size:13px">' + l.desc + (l.isProjected ? ' <span style="font-size:10px;color:var(--accent2);background:var(--accent2-light);padding:1px 6px;border-radius:10px">projected</span>' : '') + '</td>' +
-      '<td class="cr mono" style="color:var(--danger);font-size:13px">' + (l.debit > 0 ? fmtN(l.debit) : '') + '</td>' +
-      '<td class="cr mono" style="color:var(--success);font-size:13px">' + (l.credit > 0 ? fmtN(l.credit) : '') + '</td>' +
-      '<td class="cr mono fw6" style="font-size:13px;' + balColor + '">' + fmtN(Math.round(l.balance)) + '</td>' +
+    const isToday = l.date === todayStr;
+    const rowBg = l.isCurrent && !l.infoOnly ? 'background:rgba(58,156,107,.06)' :
+                  l.isProjected ? 'background:rgba(58,107,193,.04)' :
+                  l.infoOnly ? 'background:rgba(193,127,58,.05)' : '';
+    const debitAmt  = l.infoOnly ? 0 : (l.delta > 0 ? l.delta : 0);
+    const creditAmt = l.infoOnly ? 0 : (l.delta < 0 ? -l.delta : 0);
+    const balDisp   = l.infoOnly
+      ? '<span style="color:var(--muted);font-size:11px">—</span>'
+      : fmtN(Math.round(l.balance));
+    const infoTag   = l.infoOnly
+      ? ' <span style="font-size:10px;color:var(--accent);background:var(--accent-light);padding:1px 6px;border-radius:10px">₹' + fmtN(l.infoAmt) + ' pending</span>'
+      : '';
+    const projTag   = l.isProjected
+      ? ' <span style="font-size:10px;color:var(--accent2);background:var(--accent2-light);padding:1px 6px;border-radius:10px">projected</span>'
+      : '';
+    return '<tr style="' + rowBg + '">' +
+      '<td class="mono" style="font-size:12px;white-space:nowrap">' + dateDisp + (isToday ? ' <span style="font-size:9px;color:var(--success);font-weight:700">TODAY</span>' : '') + '</td>' +
+      '<td style="font-size:13px">' + l.desc + infoTag + projTag + '</td>' +
+      '<td class="cr mono" style="color:var(--danger);font-size:13px">' + (debitAmt > 0 ? fmtN(debitAmt) : '') + '</td>' +
+      '<td class="cr mono" style="color:var(--success);font-size:13px">' + (creditAmt > 0 ? fmtN(creditAmt) : '') + '</td>' +
+      '<td class="cr mono fw6" style="font-size:13px">' + balDisp + '</td>' +
     '</tr>';
   }).join('');
 
-  // Summary footer
-  const totDebit = visible.reduce((s,l) => s+l.debit, 0);
-  const totCredit = visible.reduce((s,l) => s+l.credit, 0);
-  body.innerHTML += '<tr style="border-top:2px solid var(--border);background:var(--surface2)">' +
+  // Footer totals (exclude info-only rows)
+  const realLines = visible.filter(l => !l.infoOnly);
+  const totDebit  = realLines.reduce((s,l) => s + (l.delta > 0 ? l.delta : 0), 0);
+  const totCredit = realLines.reduce((s,l) => s + (l.delta < 0 ? -l.delta : 0), 0);
+  const lastBal   = realLines.length ? realLines[realLines.length-1].balance : 0;
+  body.innerHTML +=
+    '<tr style="border-top:2px solid var(--border);background:var(--surface2)">' +
     '<td colspan="2" style="font-weight:700;font-size:12px;font-family:IBM Plex Mono,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">TOTAL</td>' +
-    '<td class="cr mono fw6" style="color:var(--danger)">' + fmtN(totDebit) + '</td>' +
-    '<td class="cr mono fw6" style="color:var(--success)">' + fmtN(totCredit) + '</td>' +
-    '<td class="cr mono fw6">' + (visible.length ? fmtN(Math.round(visible[visible.length-1].balance)) : '—') + '</td>' +
-  '</tr>';
+    '<td class="cr mono fw6" style="color:var(--danger)">' + fmtN(Math.round(totDebit)) + '</td>' +
+    '<td class="cr mono fw6" style="color:var(--success)">' + fmtN(Math.round(totCredit)) + '</td>' +
+    '<td class="cr mono fw6">' + fmtN(Math.round(lastBal)) + '</td>' +
+    '</tr>';
 
   if(!showAll && projCount > 0) {
-    body.innerHTML += '<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--muted);font-size:13px">' +
+    body.innerHTML +=
+      '<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--muted);font-size:13px">' +
       projCount + ' projected future transactions hidden — ' +
       '<button onclick="setShowAll()" style="background:none;border:none;cursor:pointer;color:var(--accent);font-weight:700;font-size:13px;font-family:inherit">Show future projections →</button>' +
-    '</td></tr>';
+      '</td></tr>';
   }
 }
 
