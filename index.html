@@ -271,6 +271,28 @@ tbody td:first-child{color:var(--ink);font-weight:500}
   .loan-select-card{padding:12px}
   #loan-amort-card .ch{flex-direction:column;align-items:flex-start}
 }
+
+/* ── WORK PROGRESS ── */
+.ms-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--bg2)}
+.ms-row:hover{background:var(--surface2)}
+.ms-check{width:22px;height:22px;flex-shrink:0;cursor:pointer;accent-color:var(--success)}
+.ms-name{flex:1;font-size:14px;font-weight:600;color:var(--ink)}
+.ms-name.done{color:var(--success)}
+.ms-pct{width:54px;text-align:center;font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+.ms-amt{width:120px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink2);font-weight:600}
+.ms-paid{width:120px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:13px}
+
+/* ── BUDGET ALLOCATION ── */
+.zone-card{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow);margin-bottom:20px}
+.zone-head{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--bg2)}
+.zone-title{font-family:'Playfair Display',serif;font-size:19px;font-weight:700}
+.zone-sub{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.cat-row{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr auto;gap:10px;align-items:center;padding:9px 4px;border-bottom:1px solid var(--bg2);font-size:13px}
+.cat-row.hd{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)}
+.cat-row input{background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px;width:100%;outline:none}
+.cat-row input:focus{border-color:var(--accent)}
+.excess-pos{color:var(--success);font-weight:700}
+.excess-neg{color:var(--danger);font-weight:700}
 </style>
 </head>
 <body>
@@ -298,6 +320,9 @@ tbody td:first-child{color:var(--ink);font-weight:500}
     <button class="nb" onclick="go('categories')"><span class="ic">🏷️</span><span>Categories</span></button>
     <button class="nb" onclick="go('documents')"><span class="ic">📁</span><span>Documents</span></button>
     <button class="nb" onclick="go('loan')"><span class="ic">🏦</span><span>Loan Tracker</span></button>
+    <div class="nl">Progress &amp; Budget</div>
+    <button class="nb" onclick="go('workprogress')"><span class="ic">✅</span><span>Work Progress</span></button>
+    <button class="nb" onclick="go('budget')"><span class="ic">🧮</span><span>Budget Allocation</span></button>
     <div class="nl">Insights</div>
     <button class="nb" onclick="go('analytics')"><span class="ic">📈</span><span>Analytics</span></button>
   </nav>
@@ -308,7 +333,7 @@ tbody td:first-child{color:var(--ink);font-weight:500}
     </div>
     <button class="btn bs sm" id="sync-btn" onclick="fsPull()" style="width:100%;margin-bottom:8px;justify-content:center;display:none">⟳ Sync Now</button>
     <button class="btn bs sm" id="backup-btn" onclick="triggerDriveBackup(true)" style="width:100%;margin-bottom:8px;justify-content:center;display:none" title="Backup to Google Drive">☁️ Backup to Drive</button>
-    <div class="sbver">v2.2 · <span id="last-sync-sb">—</span> · backup: <span id="last-backup-sb">never</span></div>
+    <div class="sbver">v2.3 · <span id="last-sync-sb">—</span> · backup: <span id="last-backup-sb">never</span></div>
   </div>
 </aside>
 
@@ -383,7 +408,10 @@ tbody td:first-child{color:var(--ink);font-weight:500}
         <div class="fd"><label>Description</label><input id="exp-desc" placeholder="e.g. Builder payment – Phase 2"/></div>
         <div class="fd"><label>Amount (₹)</label><input type="number" id="exp-amt" placeholder="e.g. 50000"/></div>
       </div>
-      <div class="fd mt2"><label>Notes</label><textarea id="exp-notes" placeholder="Receipt no., contractor details…"></textarea></div>
+      <div class="fg mt2">
+        <div class="fd"><label>Milestone (optional)</label><select id="exp-milestone"><option value="">— Not linked to a milestone —</option></select></div>
+        <div class="fd"><label>Notes</label><input id="exp-notes" placeholder="Receipt no., contractor details…"/></div>
+      </div>
       <div class="mt3 flex gap2">
         <button class="btn bp" onclick="addExpense()">＋ Save Expense</button>
         <button class="btn bs" onclick="toggleAddForm('add-exp-form',document.getElementById('btn-add-exp'))">Cancel</button>
@@ -657,6 +685,61 @@ tbody td:first-child{color:var(--ink);font-weight:500}
 
 </section>
 
+<!-- WORK PROGRESS -->
+<section id="sec-workprogress" class="sec">
+  <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div><h2>Work Progress</h2><p>Stage-wise completion vs contract value &amp; actual money paid</p></div>
+    <div class="flex gap2" style="padding-top:8px;flex-wrap:wrap">
+      <button class="btn bs sm" onclick="loadMilestoneTemplate()">📋 Load Standard 17-Stage Template</button>
+      <button class="btn bp sm" onclick="om('mo-milestone')">＋ Add Milestone</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">Contract Value</div></div>
+    <div class="fg" style="grid-template-columns:1fr 2fr;align-items:flex-end">
+      <div class="fd"><label>Total Contract Value (₹)</label><input type="number" id="wp-contract-value" placeholder="e.g. 16650300" oninput="saveContractValue();renderWork()"/></div>
+      <div class="info-box" style="margin-bottom:0">Milestone % below is applied to this value to get each stage's committed amount. Editing this recalculates every milestone's committed amount automatically (unless you've overridden it manually).</div>
+    </div>
+  </div>
+
+  <div class="sg" id="wp-kpi-grid">
+    <div class="sc t1"><div class="sl">Contract Value</div><div class="sv" id="wp-total">₹0</div><div class="ss">100% of scope</div></div>
+    <div class="sc t3"><div class="sl">Physical Completion</div><div class="sv" id="wp-pct">0%</div><div class="ss" id="wp-pct-sub">₹0 of work done</div></div>
+    <div class="sc t2"><div class="sl">Actually Paid (linked)</div><div class="sv" id="wp-paid">₹0</div><div class="ss">from linked expenses</div></div>
+    <div class="sc t4"><div class="sl">Variance</div><div class="sv" id="wp-variance">₹0</div><div class="ss" id="wp-variance-sub">paid vs completed work</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">Milestones</div></div>
+    <div class="ms-row" style="border-bottom:2px solid var(--border);font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+      <span style="width:22px"></span><span class="ms-name">Stage</span><span class="ms-pct">%</span><span class="ms-amt">Committed</span><span class="ms-paid">Paid (linked)</span><span style="width:60px"></span>
+    </div>
+    <div id="ms-list"></div>
+  </div>
+</section>
+
+<!-- BUDGET ALLOCATION -->
+<section id="sec-budget" class="sec">
+  <div class="sh" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div><h2>Budget Allocation</h2><p>Committed rate/sqft per zone, broken into categories — see where you have excess or overspend</p></div>
+    <div class="flex gap2" style="flex-wrap:wrap">
+      <button class="btn bs sm" onclick="loadContractBudgetTemplate()">📋 Load from Contract (Commercial + Residential)</button>
+      <button class="btn bp sm" onclick="om('mo-zone')">＋ Add Zone</button>
+    </div>
+  </div>
+
+
+  <div class="sg" id="bg-kpi-grid">
+    <div class="sc t1"><div class="sl">Total Committed</div><div class="sv" id="bg-total-committed">₹0</div><div class="ss">across all zones</div></div>
+    <div class="sc t2"><div class="sl">Total Actual Used</div><div class="sv" id="bg-total-actual">₹0</div><div class="ss">across all categories</div></div>
+    <div class="sc t3"><div class="sl">Total Excess Available</div><div class="sv" id="bg-total-excess">₹0</div><div class="ss">project-wide pool</div></div>
+    <div class="sc t4"><div class="sl">Zones Tracked</div><div class="sv" id="bg-zone-count">0</div><div class="ss">custom-defined</div></div>
+  </div>
+
+  <div id="zone-list"></div>
+</section>
+
 </main>
 </div>
 
@@ -701,6 +784,7 @@ tbody td:first-child{color:var(--ink);font-weight:500}
       <div class="fd"><label>Category</label><select id="ee-cat"></select></div>
       <div class="fd"><label>Paid From (Source)</label><select id="ee-src"></select></div>
     </div>
+    <div class="fd mt2"><label>Milestone (optional)</label><select id="ee-milestone"><option value="">— Not linked to a milestone —</option></select></div>
     <div class="fd mt2"><label>Notes</label><input id="ee-notes" placeholder="Notes (optional)"/></div>
     <div class="ma">
       <button class="btn bs" onclick="cm('mo-edit-exp')">Cancel</button>
@@ -974,6 +1058,61 @@ service cloud.firestore {
   </div>
 </div>
 
+<!-- ADD/EDIT MILESTONE MODAL -->
+<div class="mo" id="mo-milestone">
+  <div class="modal">
+    <h3 id="ms-modal-title">Add Milestone</h3>
+    <p class="msub">A payment-schedule stage tied to a % of the contract value</p>
+    <input type="hidden" id="ms-id"/>
+    <div class="fd"><label>Stage Name</label><input id="ms-name" placeholder="e.g. Commencement of internal Plastering"/></div>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd"><label>% of Contract Value</label><input type="number" id="ms-pct" step="0.1" placeholder="e.g. 5" oninput="msPctChanged()"/></div>
+      <div class="fd"><label>Committed Amount (₹)</label><input type="number" id="ms-amt" placeholder="auto from %" oninput="msAmtChanged()"/></div>
+    </div>
+    <div class="fd mt2"><label>Notes</label><input id="ms-notes" placeholder="Optional notes"/></div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-milestone')">Cancel</button>
+      <button class="btn bp" onclick="saveMilestone()">✓ Save Milestone</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD ZONE MODAL -->
+<div class="mo" id="mo-zone">
+  <div class="modal">
+    <h3>Add Zone</h3>
+    <p class="msub">A zone is a floor or group of floors with its own committed rate/sqft — e.g. "GF + Parking (Commercial)"</p>
+    <div class="fd"><label>Zone Name</label><input id="zn-name" placeholder="e.g. Ground Floor Commercial + Parking"/></div>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd"><label>Area (sqft)</label><input type="number" id="zn-sqft" placeholder="e.g. 1742"/></div>
+      <div class="fd"><label>Committed Rate (₹/sqft)</label><input type="number" id="zn-rate" placeholder="e.g. 2000"/></div>
+    </div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-zone')">Cancel</button>
+      <button class="btn bp" onclick="saveZone()">✓ Add Zone</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD CATEGORY MODAL -->
+<div class="mo" id="mo-bcat">
+  <div class="modal">
+    <h3>Add Category</h3>
+    <p class="msub" id="bcat-zone-label">Add a cost category within this zone</p>
+    <input type="hidden" id="bcat-zone-id"/>
+    <div class="fd"><label>Category Name</label><input id="bcat-name" placeholder="e.g. Flooring, Bathroom Fittings, Taps…"/></div>
+    <div class="chips mt1" id="bcat-presets" style="margin-bottom:0"></div>
+    <div class="fg mt2" style="grid-template-columns:1fr 1fr">
+      <div class="fd"><label>Committed (₹)</label><input type="number" id="bcat-committed" placeholder="e.g. 500000"/></div>
+      <div class="fd"><label>Actual Used (₹)</label><input type="number" id="bcat-actual" placeholder="e.g. 0" value="0"/></div>
+    </div>
+    <div class="ma">
+      <button class="btn bs" onclick="cm('mo-bcat')">Cancel</button>
+      <button class="btn bp" onclick="saveBudgetCat()">✓ Add Category</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -994,7 +1133,10 @@ let S = {
     {name:'Photos',icon:'📷'},{name:'Other',icon:'📎'}
   ],
   loanConfigs:{},   // keyed by source id — persisted to Firebase
-  loanAdjustments:{} // keyed by source id — array of {date,amount,type,notes}
+  loanAdjustments:{}, // keyed by source id — array of {date,amount,type,notes}
+  workMilestones:[],  // [{id,name,pct,amount,amountOverridden,done,notes}]
+  contractValue:0,
+  budgetZones:[]      // [{id,name,sqft,rate,categories:[{id,name,committed,actual}]}]
 };
 let pDel=null, expCatFilt='all', expSrcFilt='all', impData=[];
 let db=null, fsUnsubscribe=null, fsConnected=false;
@@ -1009,7 +1151,7 @@ function go(id){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
   document.querySelectorAll('.nb').forEach(b=>{if(b.getAttribute('onclick')?.includes("'"+id+"'"))b.classList.add('active');});
-  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{},documents:()=>{docFilt=null;renderDocs();},loan:renderLoan})[id]?.();
+  ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,import:()=>{},documents:()=>{docFilt=null;renderDocs();},loan:renderLoan,workprogress:renderWork,budget:renderBudget})[id]?.();
 }
 
 // ━━━ UTILS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1246,6 +1388,7 @@ function refreshDrops(){
   if(cs)cs.innerHTML=S.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   if(ss)ss.innerHTML='<option value="">— No specific source —</option>'+S.sources.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   refreshDocExpDrop();
+  refreshMilestoneDrops();
 }
 function addExpense(){
   const date=document.getElementById('exp-date').value;
@@ -1254,12 +1397,14 @@ function addExpense(){
   const desc=document.getElementById('exp-desc').value.trim();
   const amount=parseFloat(document.getElementById('exp-amt').value)||0;
   const notes=document.getElementById('exp-notes').value.trim();
+  const milestone=document.getElementById('exp-milestone')?document.getElementById('exp-milestone').value:'';
   if(!date){toast('Select date','e');return}
   if(!desc){toast('Enter description','e');return}
   if(amount<=0){toast('Enter valid amount','e');return}
-  S.expenses.push({id:uid(),date,category:cat,source,desc,amount,notes});
+  S.expenses.push({id:uid(),date,category:cat,source,desc,amount,notes,milestone});
   S.expenses.sort((a,b)=>b.date.localeCompare(a.date));
   ['exp-date','exp-desc','exp-amt','exp-notes'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  const msEl=document.getElementById('exp-milestone');if(msEl)msEl.value='';
   save();renderExp();renderDash();closeAddForms();toast('Expense added!');
 }
 function delExp(id){
@@ -1405,6 +1550,29 @@ function buildXLSContent(docs){
     docRows.push(row([cell('No documents uploaded yet'),cell(''),cell(''),cell(''),cell(''),cell('')]));
   }
 
+  // Sheet 5: Work Progress (milestones)
+  const msRows=[row([hdr('Stage'),hdr('% of Contract'),hdr('Committed (₹)'),hdr('Paid (linked) (₹)'),hdr('Status'),hdr('Notes')])];
+  (S.workMilestones||[]).forEach(m=>{
+    const paid=milestonePaid(m.id);
+    msRows.push(row([cell(m.name),cell((m.pct||0)+'%'),cell(m.amount||0,'Number'),cell(paid,'Number'),cell(m.done?'Completed':'Pending'),cell(m.notes||'')]));
+  });
+
+  // Sheet 6: Budget Allocation
+  const bgRows=[row([hdr('Zone'),hdr('Zone Area (sqft)'),hdr('Zone Rate (₹/sqft)'),hdr('Category'),hdr('Committed (₹)'),hdr('Actual Used (₹)'),hdr('Excess/Shortfall (₹)')])];
+  (S.budgetZones||[]).forEach(z=>{
+    const cats=z.categories||[];
+    if(!cats.length){
+      bgRows.push(row([cell(z.name),cell(z.sqft,'Number'),cell(z.rate,'Number'),cell('—'),cell(''),cell(''),cell('')]));
+    } else {
+      cats.forEach((c,i)=>{
+        bgRows.push(row([
+          cell(i===0?z.name:''), i===0?cell(z.sqft,'Number'):cell(''), i===0?cell(z.rate,'Number'):cell(''),
+          cell(c.name), cell(c.committed||0,'Number'), cell(c.actual||0,'Number'), cell((c.committed||0)-(c.actual||0),'Number')
+        ]));
+      });
+    }
+  });
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
@@ -1417,6 +1585,8 @@ function buildXLSContent(docs){
 <Worksheet ss:Name="Sources"><Table>${srcRows.join('')}</Table></Worksheet>
 <Worksheet ss:Name="Category Summary"><Table>${catRows.join('')}</Table></Worksheet>
 <Worksheet ss:Name="Documents Index"><Table>${docRows.join('')}</Table></Worksheet>
+<Worksheet ss:Name="Work Progress"><Table>${msRows.join('')}</Table></Worksheet>
+<Worksheet ss:Name="Budget Allocation"><Table>${bgRows.join('')}</Table></Worksheet>
 </Workbook>`;
 }
 
@@ -1427,7 +1597,7 @@ async function exportXLSX(){
   a.href='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(xl);
   a.download='BuildLedger_'+new Date().toISOString().split('T')[0]+'.xls';
   a.click();
-  toast('✓ Excel downloaded (4 sheets incl. Documents Index)');
+  toast('✓ Excel downloaded (6 sheets incl. Work Progress &amp; Budget Allocation)');
 }
 
 // ━━━ BULK IMPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1561,6 +1731,9 @@ function doDel(){
   if(pDel.type==='expense')S.expenses=S.expenses.filter(e=>e.id!==pDel.id);
   else if(pDel.type==='source'){S.sources=S.sources.filter(s=>s.id!==pDel.id);refreshDrops();}
   else if(pDel.type==='category')S.categories=S.categories.filter(c=>c.id!==pDel.id);
+  else if(pDel.type==='milestone')S.workMilestones=(S.workMilestones||[]).filter(m=>m.id!==pDel.id);
+  else if(pDel.type==='zone')S.budgetZones=(S.budgetZones||[]).filter(z=>z.id!==pDel.id);
+  else if(pDel.type==='bcat'){const z=(S.budgetZones||[]).find(z=>z.id===pDel.zoneId);if(z)z.categories=(z.categories||[]).filter(c=>c.id!==pDel.id);}
   save();cm('mo-del');pDel=null;
   const a=document.querySelector('.sec.active');if(a)go(a.id.replace('sec-',''));
   toast('Deleted');
@@ -1707,7 +1880,7 @@ function fsSubscribe(){
         renderDash();
         const a=document.querySelector('.sec.active');
         if(a){const id=a.id.replace('sec-','');
-          ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn})[id]?.();}
+          ({dashboard:renderDash,sources:renderSrc,expenses:renderExp,categories:renderCats,analytics:renderAn,workprogress:renderWork,budget:renderBudget})[id]?.();}
         syncTimestamp();
         toast('↓ Data updated from cloud','i');
       }
@@ -1792,6 +1965,10 @@ function openEditExp(id){
   const srcSel=document.getElementById('ee-src');
   catSel.innerHTML=S.categories.map(c=>`<option value="${c.id}"${c.id===e.category?' selected':''}>${c.name}</option>`).join('');
   srcSel.innerHTML='<option value="">— No specific source —</option>'+S.sources.map(s=>`<option value="${s.id}"${s.id===e.source?' selected':''}>${s.name}</option>`).join('');
+  const msSel=document.getElementById('ee-milestone');
+  if(msSel){
+    msSel.innerHTML='<option value="">— Not linked to a milestone —</option>'+(S.workMilestones||[]).map(m=>`<option value="${m.id}"${m.id===e.milestone?' selected':''}>${m.name}</option>`).join('');
+  }
   om('mo-edit-exp');
 }
 function saveEditExp(){
@@ -1802,15 +1979,18 @@ function saveEditExp(){
   const cat=document.getElementById('ee-cat').value;
   const src=document.getElementById('ee-src').value;
   const notes=document.getElementById('ee-notes').value.trim();
+  const milestone=document.getElementById('ee-milestone')?document.getElementById('ee-milestone').value:'';
   if(!date){toast('Select a date','e');return}
   if(!desc){toast('Enter a description','e');return}
   if(amt<=0){toast('Enter a valid amount','e');return}
   const exp=S.expenses.find(x=>x.id===id);
   if(!exp)return;
   exp.date=date; exp.amount=amt; exp.desc=desc;
-  exp.category=cat; exp.source=src; exp.notes=notes;
+  exp.category=cat; exp.source=src; exp.notes=notes; exp.milestone=milestone;
   S.expenses.sort((a,b)=>b.date.localeCompare(a.date));
   save(); cm('mo-edit-exp'); renderExp(); renderDash();
+  const a=document.querySelector('.sec.active');
+  if(a&&a.id==='sec-workprogress')renderWork();
   toast('✓ Expense updated!');
 }
 
@@ -3323,6 +3503,374 @@ function closeSidebar(){
 document.addEventListener('click',e=>{
   if(e.target.closest('.nb')&&window.innerWidth<=768)closeSidebar();
 });
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ WORK PROGRESS (Requirement 1) ━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Standard 17-stage template — mirrors a typical stage-wise construction
+// payment schedule (advance → plinth → floor-wise block/slab → finishes)
+const MILESTONE_TEMPLATE = [
+  {name:'Advance on signing the agreement', pct:15},
+  {name:'Completion of Plinth level', pct:6},
+  {name:'Commencement of ground floor block work', pct:5},
+  {name:'Commencement of ground floor slab', pct:6},
+  {name:'Commencement of first floor block work', pct:5},
+  {name:'Commencement of first floor slab', pct:6},
+  {name:'Commencement of second floor block work', pct:5},
+  {name:'Commencement of second floor slab', pct:6},
+  {name:'Commencement of third floor block work', pct:5},
+  {name:'Commencement of third floor slab', pct:6},
+  {name:'Commencement of external plastering', pct:5},
+  {name:'Commencement of internal plastering', pct:5},
+  {name:'Commencement of flooring work', pct:10},
+  {name:'Commencement of electrical work', pct:5},
+  {name:'Commencement of plumbing work', pct:5},
+  {name:'Commencement of external painting work', pct:2.5},
+  {name:'Commencement of internal painting work', pct:2.5},
+];
+
+function saveContractValue(){
+  S.contractValue = parseFloat(document.getElementById('wp-contract-value').value)||0;
+  // Recompute non-overridden milestone amounts against the new contract value
+  (S.workMilestones||[]).forEach(m=>{
+    if(!m.amountOverridden) m.amount = Math.round(S.contractValue * (m.pct||0) / 100);
+  });
+  save();
+}
+
+function loadMilestoneTemplate(){
+  if((S.workMilestones||[]).length && !confirm('This will ADD the standard 17 stages to your existing milestone list. Continue?')) return;
+  if(!S.workMilestones) S.workMilestones=[];
+  const cv = S.contractValue || 0;
+  MILESTONE_TEMPLATE.forEach(t=>{
+    S.workMilestones.push({
+      id:uid(), name:t.name, pct:t.pct,
+      amount: Math.round(cv * t.pct / 100),
+      amountOverridden:false, done:false, notes:''
+    });
+  });
+  save(); renderWork(); refreshMilestoneDrops();
+  toast('✓ Standard 17-stage template loaded');
+}
+
+function milestonePaid(milestoneId){
+  return S.expenses.filter(e=>e.milestone===milestoneId).reduce((s,e)=>s+e.amount,0);
+}
+
+function refreshMilestoneDrops(){
+  const list = S.workMilestones||[];
+  ['exp-milestone'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel)return;
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Not linked to a milestone —</option>'+list.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+    sel.value=cur;
+  });
+}
+
+function toggleMilestoneDone(id, checked){
+  const m=(S.workMilestones||[]).find(m=>m.id===id);
+  if(!m)return;
+  m.done=checked;
+  save(); renderWork();
+}
+
+function openMilestoneModal(id){
+  document.getElementById('ms-modal-title').textContent = id ? 'Edit Milestone' : 'Add Milestone';
+  document.getElementById('ms-id').value = id||'';
+  if(id){
+    const m=(S.workMilestones||[]).find(m=>m.id===id);
+    if(!m)return;
+    document.getElementById('ms-name').value=m.name;
+    document.getElementById('ms-pct').value=m.pct||'';
+    document.getElementById('ms-amt').value=m.amount||0;
+    document.getElementById('ms-notes').value=m.notes||'';
+  } else {
+    document.getElementById('ms-name').value='';
+    document.getElementById('ms-pct').value='';
+    document.getElementById('ms-amt').value='';
+    document.getElementById('ms-notes').value='';
+  }
+  om('mo-milestone');
+}
+function msPctChanged(){
+  const pct=parseFloat(document.getElementById('ms-pct').value)||0;
+  const cv=S.contractValue||0;
+  document.getElementById('ms-amt').value = cv ? Math.round(cv*pct/100) : document.getElementById('ms-amt').value;
+}
+function msAmtChanged(){ /* if user types amount directly, we treat it as an override — nothing else needed here */ }
+
+function saveMilestone(){
+  const id=document.getElementById('ms-id').value;
+  const name=document.getElementById('ms-name').value.trim();
+  const pct=parseFloat(document.getElementById('ms-pct').value)||0;
+  const amt=parseFloat(document.getElementById('ms-amt').value)||0;
+  const notes=document.getElementById('ms-notes').value.trim();
+  if(!name){toast('Enter a stage name','e');return}
+  if(!S.workMilestones)S.workMilestones=[];
+  const cv=S.contractValue||0;
+  const autoAmt = cv ? Math.round(cv*pct/100) : 0;
+  const overridden = amt>0 && amt!==autoAmt;
+  if(id){
+    const m=S.workMilestones.find(m=>m.id===id);
+    if(m){ m.name=name; m.pct=pct; m.amount=amt||autoAmt; m.amountOverridden=overridden; m.notes=notes; }
+  } else {
+    S.workMilestones.push({id:uid(),name,pct,amount:amt||autoAmt,amountOverridden:overridden,done:false,notes});
+  }
+  save(); cm('mo-milestone'); renderWork(); refreshMilestoneDrops();
+  toast('✓ Milestone saved');
+}
+
+function delMilestone(id){
+  pDel={type:'milestone',id};
+  document.getElementById('del-msg').textContent=`Delete milestone "${(S.workMilestones||[]).find(m=>m.id===id)?.name}"? Linked expenses will remain but become unlinked.`;
+  om('mo-del');
+}
+
+function renderWork(){
+  // Contract value input
+  const cvInput=document.getElementById('wp-contract-value');
+  if(cvInput) cvInput.value = S.contractValue||'';
+  refreshMilestoneDrops();
+
+  const list = S.workMilestones||[];
+  const total = S.contractValue||0;
+  const committedDone = list.filter(m=>m.done).reduce((s,m)=>s+(m.amount||0),0);
+  const totalCommitted = list.reduce((s,m)=>s+(m.amount||0),0);
+  const totalPaid = list.reduce((s,m)=>s+milestonePaid(m.id),0);
+  const pct = total ? Math.round(committedDone/total*100) : (totalCommitted ? Math.round(committedDone/totalCommitted*100) : 0);
+  const variance = totalPaid - committedDone;
+
+  document.getElementById('wp-total').textContent = fmt(total||totalCommitted);
+  document.getElementById('wp-pct').textContent = pct+'%';
+  document.getElementById('wp-pct-sub').textContent = fmt(committedDone)+' of work marked done';
+  document.getElementById('wp-paid').textContent = fmt(totalPaid);
+  document.getElementById('wp-variance').textContent = (variance>=0?'+':'')+fmt(variance);
+  document.getElementById('wp-variance-sub').textContent = variance>=0 ? 'paid ahead of completed work' : 'completed work not yet fully paid';
+  const varEl=document.getElementById('wp-variance');
+  varEl.style.color = variance>0 ? 'var(--danger)' : (variance<0 ? 'var(--accent)' : 'var(--ink)');
+
+  const msList=document.getElementById('ms-list');
+  if(!list.length){
+    msList.innerHTML='<div class="empty"><div class="ei">✅</div><p>No milestones yet</p><small>Load the standard 17-stage template or add your own</small></div>';
+    return;
+  }
+  msList.innerHTML=list.map(m=>{
+    const paid=milestonePaid(m.id);
+    return `<div class="ms-row">
+      <input type="checkbox" class="ms-check" ${m.done?'checked':''} onchange="toggleMilestoneDone('${m.id}',this.checked)"/>
+      <span class="ms-name ${m.done?'done':''}">${m.name}${m.notes?`<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">${m.notes}</div>`:''}</span>
+      <span class="ms-pct">${m.pct||0}%</span>
+      <span class="ms-amt">${fmt(m.amount||0)}</span>
+      <span class="ms-paid" style="color:${paid>0?'var(--success)':'var(--muted)'}">${fmt(paid)}</span>
+      <span style="display:flex;gap:4px">
+        <button class="btn bs sm" onclick="openMilestoneModal('${m.id}')" title="Edit">✏️</button>
+        <button class="btn bd sm" onclick="delMilestone('${m.id}')" title="Delete">×</button>
+      </span>
+    </div>`;
+  }).join('');
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ BUDGET ALLOCATION (Requirement 2) ━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const BUDGET_CAT_PRESETS = ['Structure (RCC/Masonry/Steel)','Flooring & Tiles','Bathroom Fittings','Taps & Sanitaryware','Electrical','Plumbing','Painting','Doors & Windows','Miscellaneous'];
+
+// Seed Commercial + Residential zones straight from the MRInfratech contract document:
+// "2 floor of Commercial space 3982 sft @ 2000 Rs/Sft" and "2 floor of Residential
+// house @ 2300 Rs/Sft", total assumed built-up area ~8300 sft.
+// Only line items with an explicit ₹/sft (or flat) rate in the contract are pre-costed;
+// everything else (structure, electrical, plumbing pipework, painting, misc) is bundled
+// into a single "remainder" category so each zone's categories always foot back to the
+// zone's sqft × rate contract value — every rupee is accounted for, and the remainder
+// category is exactly what you have to work with for anything not itemised below.
+function loadContractBudgetTemplate(){
+  if((S.budgetZones||[]).length && !confirm('This will ADD two new zones (Commercial + Residential) seeded from the contract document. Continue?')) return;
+  if(!S.budgetZones) S.budgetZones=[];
+
+  const commSqft = 3982, commRate = 2000;
+  const totalSqft = 8300, resiSqft = Math.max(0, totalSqft - commSqft), resiRate = 2300;
+
+  const commTotal = commSqft*commRate;
+  const commFlooring = Math.round(commSqft*60);      // parking/corridor anti-skid tile @ ₹60/sft
+  const commMainDoor = 50000;                         // flat, per contract
+  const commItemised = commFlooring + commMainDoor;
+  const commRemainder = commTotal - commItemised;
+
+  const resiTotal = resiSqft*resiRate;
+  const resiFlooring = Math.round(resiSqft*120);      // granite living/dining/kitchen/rooms @ ₹120/sft
+  const resiKitchen = 10000;                          // sink (₹6000) + main faucet (₹4000) flat allowance
+  const resiItemised = resiFlooring + resiKitchen;
+  const resiRemainder = resiTotal - resiItemised;
+
+  S.budgetZones.push({
+    id:uid(), name:'Commercial (Ground + First Floor)', sqft:commSqft, rate:commRate,
+    categories:[
+      {id:uid(), name:'Flooring — Parking/Corridor Anti-skid Tile (₹60/sft basic, contract)', committed:commFlooring, actual:0},
+      {id:uid(), name:'Main Door (flat, per contract — French polish teak)', committed:commMainDoor, actual:0},
+      {id:uid(), name:'Windows — Neem wood @ ₹900/sft (enter actual window sqft)', committed:0, actual:0},
+      {id:uid(), name:'Sanitary ware & CP Fittings — ₹30,000/bathroom (enter bathroom count)', committed:0, actual:0},
+      {id:uid(), name:'Structure, Electrical, Plumbing, Painting & Misc (bundled in base rate — remainder)', committed:commRemainder, actual:0},
+    ]
+  });
+
+  S.budgetZones.push({
+    id:uid(), name:'Residential (Second + Third Floor)', sqft:resiSqft, rate:resiRate,
+    categories:[
+      {id:uid(), name:'Flooring — Granite Living/Dining/Kitchen/Rooms (₹120/sft basic, contract)', committed:resiFlooring, actual:0},
+      {id:uid(), name:'Flooring — Toilets Anti-skid Ceramic Tile (₹60/sft — enter actual toilet sqft)', committed:0, actual:0},
+      {id:uid(), name:'Kitchen — Sink & Main Faucet allowance (flat, per contract)', committed:resiKitchen, actual:0},
+      {id:uid(), name:'Kitchen — Granite backsplash @ ₹150/sft (enter actual sqft)', committed:0, actual:0},
+      {id:uid(), name:'Windows — Neem wood @ ₹900/sft (enter actual window sqft)', committed:0, actual:0},
+      {id:uid(), name:'Sanitary ware & CP Fittings — ₹30,000/bathroom (enter bathroom count)', committed:0, actual:0},
+      {id:uid(), name:'Structure, Electrical, Plumbing, Painting & Misc (bundled in base rate — remainder)', committed:resiRemainder, actual:0},
+    ]
+  });
+
+  save(); renderBudget();
+  toast('✓ Commercial + Residential zones loaded from contract — edit sqft/rate/categories as needed');
+}
+
+function saveZone(){
+  const name=document.getElementById('zn-name').value.trim();
+  const sqft=parseFloat(document.getElementById('zn-sqft').value)||0;
+  const rate=parseFloat(document.getElementById('zn-rate').value)||0;
+  if(!name){toast('Enter a zone name','e');return}
+  if(!S.budgetZones)S.budgetZones=[];
+  S.budgetZones.push({id:uid(),name,sqft,rate,categories:[]});
+  ['zn-name','zn-sqft','zn-rate'].forEach(i=>document.getElementById(i).value='');
+  save(); cm('mo-zone'); renderBudget();
+  toast('✓ Zone added');
+}
+
+function delZone(id){
+  pDel={type:'zone',id};
+  document.getElementById('del-msg').textContent=`Delete zone "${(S.budgetZones||[]).find(z=>z.id===id)?.name}" and all its categories?`;
+  om('mo-del');
+}
+
+function openBudgetCatModal(zoneId){
+  const z=(S.budgetZones||[]).find(z=>z.id===zoneId);
+  if(!z)return;
+  document.getElementById('bcat-zone-id').value=zoneId;
+  document.getElementById('bcat-zone-label').textContent=`Add a cost category within "${z.name}"`;
+  document.getElementById('bcat-name').value='';
+  document.getElementById('bcat-committed').value='';
+  document.getElementById('bcat-actual').value='0';
+  document.getElementById('bcat-presets').innerHTML = BUDGET_CAT_PRESETS.map(p=>`<div class="chip" onclick="document.getElementById('bcat-name').value='${p.replace(/'/g,"\\'")}'">${p}</div>`).join('');
+  om('mo-bcat');
+}
+
+function saveBudgetCat(){
+  const zoneId=document.getElementById('bcat-zone-id').value;
+  const name=document.getElementById('bcat-name').value.trim();
+  const committed=parseFloat(document.getElementById('bcat-committed').value)||0;
+  const actual=parseFloat(document.getElementById('bcat-actual').value)||0;
+  if(!name){toast('Enter a category name','e');return}
+  const z=(S.budgetZones||[]).find(z=>z.id===zoneId);
+  if(!z)return;
+  if(!z.categories)z.categories=[];
+  z.categories.push({id:uid(),name,committed,actual});
+  save(); cm('mo-bcat'); renderBudget();
+  toast('✓ Category added');
+}
+
+function delBudgetCat(zoneId,catId){
+  pDel={type:'bcat',id:catId,zoneId};
+  document.getElementById('del-msg').textContent='Delete this category?';
+  om('mo-del');
+}
+
+function updateBudgetCatField(zoneId,catId,field,value){
+  const z=(S.budgetZones||[]).find(z=>z.id===zoneId);
+  if(!z)return;
+  const c=(z.categories||[]).find(c=>c.id===catId);
+  if(!c)return;
+  c[field]=parseFloat(value)||0;
+  save();
+  renderBudget();
+}
+function updateZoneField(zoneId,field,value){
+  const z=(S.budgetZones||[]).find(z=>z.id===zoneId);
+  if(!z)return;
+  z[field]= field==='name' ? value : (parseFloat(value)||0);
+  save();
+  renderBudget();
+}
+
+function renderBudget(){
+  const zones=S.budgetZones||[];
+  const list=document.getElementById('zone-list');
+
+  let totalCommitted=0, totalActual=0;
+
+  if(!zones.length){
+    list.innerHTML='<div class="empty"><div class="ei">🧮</div><p>No zones yet</p><small>Click "＋ Add Zone" to define a floor or group of floors (e.g. Ground Floor Commercial) with its own committed rate/sqft</small></div>';
+  } else {
+    list.innerHTML=zones.map(z=>{
+      const cats=z.categories||[];
+      const zoneCommittedFromRate = (z.sqft||0)*(z.rate||0);
+      const zoneCatCommitted = cats.reduce((s,c)=>s+(c.committed||0),0);
+      const zoneActual = cats.reduce((s,c)=>s+(c.actual||0),0);
+      const zoneExcess = zoneCatCommitted - zoneActual;
+      totalCommitted += zoneCatCommitted;
+      totalActual += zoneActual;
+
+      const mismatch = Math.abs(zoneCatCommitted - zoneCommittedFromRate) > 1;
+
+      const catRows = cats.length ? cats.map(c=>{
+        const excess = (c.committed||0)-(c.actual||0);
+        return `<div class="cat-row">
+          <input value="${c.name}" onchange="updateBudgetCatFieldName('${z.id}','${c.id}',this.value)"/>
+          <input type="number" value="${c.committed||0}" onchange="updateBudgetCatField('${z.id}','${c.id}','committed',this.value)"/>
+          <input type="number" value="${c.actual||0}" onchange="updateBudgetCatField('${z.id}','${c.id}','actual',this.value)"/>
+          <span class="${excess>=0?'excess-pos':'excess-neg'}">${excess>=0?'+':''}${fmt(excess)}</span>
+          <button class="btn bd sm" onclick="delBudgetCat('${z.id}','${c.id}')">×</button>
+        </div>`;
+      }).join('') : '<div class="empty" style="padding:16px"><p>No categories yet — add Flooring, Bathroom, Taps, etc.</p></div>';
+
+      return `<div class="zone-card">
+        <div class="zone-head">
+          <div>
+            <input value="${z.name}" onchange="updateZoneField('${z.id}','name',this.value)" style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700;border:none;background:transparent;padding:0;color:var(--ink)"/>
+            <div class="zone-sub">
+              <input type="number" value="${z.sqft||0}" onchange="updateZoneField('${z.id}','sqft',this.value)" style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-family:'IBM Plex Mono',monospace"/> sqft ×
+              ₹<input type="number" value="${z.rate||0}" onchange="updateZoneField('${z.id}','rate',this.value)" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-family:'IBM Plex Mono',monospace"/>/sqft
+              = <strong style="color:var(--ink2)">${fmt(zoneCommittedFromRate)}</strong> committed rate-based budget
+              ${mismatch?`<span class="badge bo" style="margin-left:6px" title="Category totals don't match sqft × rate">⚠ categories ≠ rate budget</span>`:''}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'IBM Plex Mono',monospace">Zone Excess</div>
+            <div class="${zoneExcess>=0?'excess-pos':'excess-neg'}" style="font-family:'Playfair Display',serif;font-size:20px">${zoneExcess>=0?'+':''}${fmt(zoneExcess)}</div>
+          </div>
+        </div>
+        <div class="cat-row hd"><span>Category</span><span>Committed</span><span>Actual Used</span><span>Excess</span><span></span></div>
+        ${catRows}
+        <div class="mt2"><button class="btn bs sm" onclick="openBudgetCatModal('${z.id}')">＋ Add Category</button>
+          <button class="btn bd sm" onclick="delZone('${z.id}')" style="margin-left:6px">Delete Zone</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('bg-total-committed').textContent=fmt(totalCommitted);
+  document.getElementById('bg-total-actual').textContent=fmt(totalActual);
+  const totalExcess=totalCommitted-totalActual;
+  const excessEl=document.getElementById('bg-total-excess');
+  excessEl.textContent=(totalExcess>=0?'+':'')+fmt(totalExcess);
+  excessEl.style.color = totalExcess>=0 ? 'var(--success)' : 'var(--danger)';
+  document.getElementById('bg-zone-count').textContent=zones.length;
+}
+
+function updateBudgetCatFieldName(zoneId,catId,value){
+  const z=(S.budgetZones||[]).find(z=>z.id===zoneId);
+  if(!z)return;
+  const c=(z.categories||[]).find(c=>c.id===catId);
+  if(!c)return;
+  c.name=value;
+  save();
+}
 
 // ━━━ INIT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function init(){
